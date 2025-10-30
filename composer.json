@@ -1,0 +1,34 @@
+{
+    "name": "seba1rx/tabmanager",
+    "description": "a simple php bootstrapped solution for session indexed browser tabs",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Sebastián Basilio"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Seba1rx\\TabManager\\": "src/",
+            "Seba1rx\\TabManager\\Exceptions\\": "Exceptions/"
+        },
+        "files": [
+            "bin/bootstrap.php"
+        ]
+    },
+    "scripts": {
+        "test": "phpunit --colors=always",
+        "post-install-cmd": [
+            "php -r \"copy(__DIR__.'/assets/seba1rx_tabmanagerclient.js', getcwd().'/seba1rx_tabmanagerclient.js');\""
+        ],
+        "post-update-cmd": [
+            "php -r \"copy(__DIR__.'/assets/seba1rx_tabmanagerclient.js', getcwd().'/seba1rx_tabmanagerclient.js');\""
+        ]
+    },
+    "require": {
+        "php": ">=8.1"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

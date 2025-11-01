@@ -1,31 +1,25 @@
 async function addData() {
     try {
-        const response = await fetch("addData.php", {
+        const response = await fetch('addData.php', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             }
         });
 
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            throw new Error(`HTTP error! Status: ${response.status}`);
         }
 
-        // const responseData = await response.json(); // Parse the JSON response
-        const responseData = await response; // Parse the JSON response
-        let pretty = JSON.stringify(responseData, null, 4);
-        console.log('Success! new data added', responseData);
-
-        document.getElementById('session_data').innerHTML = responseData;
-        // document.getElementById('session_data').textContent = responseData;
-
+        const result = await response.json();
+        console.log('Server response:', result);
+        document.getElementById('session_data').innerHTML = `<pre>${JSON.stringify(result, undefined, 2)}</pre>`;
     } catch (error) {
-        console.error('Error during fetch operation:', error);
+        console.error('Error sending data:', error);
     }
 }
 
-function reset()
-{
+
+function reset() {
     window.location.href = "terminate.php";
 }

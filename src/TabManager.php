@@ -9,14 +9,13 @@ use Seba1rx\TabManager\TabManagerException;
  */
 class TabManager
 {
-    protected string $sessionKey = 'tabs';
-
     public function __construct()
     {
+        session_start();
         error_log("## tab manager: construct");
-        if (!isset($_SESSION[$this->sessionKey])) {
-            $_SESSION[$this->sessionKey] = [];
-        }
+        error_log("## tab manager: construct: session: " . json_encode($_SESSION));
+        if (!isset($_SESSION['tabmanager'])) $_SESSION['tabmanager'] = [];
+        if (!isset($_SESSION['tabmanager']['tabs'])) $_SESSION['tabmanager']['tabs'] = [];
     }
 
     /**
@@ -28,17 +27,14 @@ class TabManager
     public function indexNewTab(string $tabId): void
     {
         error_log("## tab manager: adding new tab index: {$tabId}");
-        if (!isset($_SESSION[$this->sessionKey][$tabId])) {
-            $_SESSION[$this->sessionKey] = [];
-            $_SESSION[$this->sessionKey][$tabId] = [];
-            // $tabId = $this->getTabId();
-            // if (!$tabId) return;
+        if (!isset($_SESSION['tabmanager']['tabs'][$tabId])) {
+            $_SESSION['tabmanager']['tabs'][$tabId] = [];
 
-            $_SESSION[$this->sessionKey][$tabId]['data'] = [];
-            $_SESSION[$this->sessionKey][$tabId]['is_active'] = true;
-            $_SESSION[$this->sessionKey][$tabId]['last_active'] = time();
+            $_SESSION['tabmanager']['tabs'][$tabId]['data'] = [];
+            $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = true;
+            $_SESSION['tabmanager']['tabs'][$tabId]['last_active'] = time();
 
-            error_log("## tab manager: items: " . json_encode($_SESSION[$this->sessionKey]));
+            error_log("## tab manager: items: " . json_encode($_SESSION['tabmanager']['tabs']));
         }
     }
 
@@ -64,9 +60,9 @@ class TabManager
         $tabId = $this->getTabId();
         if (!$tabId) return;
 
-        $_SESSION[$this->sessionKey][$tabId]['data'][$key] = $value;
-        $_SESSION[$this->sessionKey][$tabId]['is_active'] = true;
-        $_SESSION[$this->sessionKey][$tabId]['last_active'] = time();
+        $_SESSION['tabmanager']['tabs'][$tabId]['data'][$key] = $value;
+        $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = true;
+        $_SESSION['tabmanager']['tabs'][$tabId]['last_active'] = time();
     }
 
     /**
@@ -80,7 +76,7 @@ class TabManager
     public function get(string $key, mixed $default = null): mixed
     {
         $tabId = $this->getTabId();
-        return $_SESSION[$this->sessionKey][$tabId]['data'][$key] ?? $default;
+        return $_SESSION['tabmanager']['tabs'][$tabId]['data'][$key] ?? $default;
     }
 
     /**
@@ -91,8 +87,8 @@ class TabManager
      */
     public function destroyTabSession(string $tabId): void
     {
-        if (isset($_SESSION[$this->sessionKey][$tabId])) {
-            unset($_SESSION[$this->sessionKey][$tabId]);
+        if (isset($_SESSION['tabmanager']['tabs'][$tabId])) {
+            unset($_SESSION['tabmanager']['tabs'][$tabId]);
         }
     }
 
@@ -104,8 +100,8 @@ class TabManager
      */
     public function markInactiveTab(string $tabId): void
     {
-        if (isset($_SESSION[$this->sessionKey][$tabId])) {
-            $_SESSION[$this->sessionKey][$tabId]['is_active'] = false;
+        if (isset($_SESSION['tabmanager']['tabs'][$tabId])) {
+            $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = false;
         }
     }
 
@@ -117,7 +113,7 @@ class TabManager
     public function debug(): array
     {
         $result = [];
-        foreach ($_SESSION[$this->sessionKey] ?? [] as $tabId => $data) {
+        foreach ($_SESSION['tabmanager']['tabs'] ?? [] as $tabId => $data) {
             $result[$tabId] = [
                 'is_active' => $data['is_active'] ?? false,
                 'last_active' => date('Y-m-d H:i:s', $data['last_active'] ?? 0),
@@ -136,7 +132,7 @@ class TabManager
      */
     public function getSessionKey(): string
     {
-        return $this->sessionKey;
+        return 'tabs';
     }
 
     /**

@@ -26,14 +26,20 @@ $pretty_sessison_data = json_encode($_SESSION, JSON_PRETTY_PRINT);
     </script>
 </head>
 <body style="padding: 20px">
-    <pre id="session_data">
-        <?= $pretty_sessison_data; ?>
-    </pre>
-    <br>
-    <br>
+    <p>Tab id: <span id="tabid"></span></p>
     <p>click on the button to add random data to the tab data</p>
     <br>
     <button type="button" onclick="addData()">Add data</button>
     <button type="button" onclick="reset()">Reset session</button>
+    <br>
+    <br>
+    <div id="session_data">
+        <pre><?= $pretty_sessison_data; ?></pre>
+    </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            document.getElementById('tabid').innerHTML = TabManagerClient.tab.id;
+        });
+    </script>
 </body>
 </html>

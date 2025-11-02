@@ -30,6 +30,11 @@ It ensures each browser tab maintains its own independent session state, prevent
 │ └── seba1rx_tabmanagerclient.js
 ├── demo/
 │ └── index.php
+│ └── addData.php
+│ └── app.js
+│ └── seba1rx-tabmanager.js
+│ └── terminate.php
+│ └── WordStringGenerator.php
 ```
 
 
@@ -69,7 +74,7 @@ window.sessionStorage (so it’s unique per tab)
 
 A cookie (TABMANAGER_TABID) sent with each request
 
-The PHP backend (TabManager) reads this cookie to isolate $_SESSION data per tab.
+The PHP backend (TabManager class) reads this cookie to isolate $_SESSION data per tab.
 
 🪄 Usage
 1. Include the Bootstrap File
@@ -79,7 +84,7 @@ At the very start of your PHP app (e.g. in your entrypoint or index.php):
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
 ```
-Since it is bootstrapped in the autoload files you don't have to manually incude the bootstrap file, it is loaded automatically.
+**Since it is bootstrapped in the autoload files you don't have to manually incude the bootstrap file, it is loaded automatically.**
 
 This automatically registers these internal endpoints:
 
@@ -91,7 +96,7 @@ This automatically registers these internal endpoints:
 | `POST` | `/tabmanager/debug/delete-tab` | Delete a tab session (debug only)    |
 
 
-⚠️ Endpoints /debug and /debug/delete-tab are restricted to local addresses (127.0.0.1) or when SESSIONADMIN_DEBUG is defined as true.
+⚠️ Endpoints /debug_js, /debug_html and /debug/delete-tab are restricted to local addresses (127.0.0.1) or when SESSIONADMIN_DEBUG is defined as true.
 
 2. Include the JS Client
 
@@ -132,23 +137,24 @@ print_r($tabManager->debug());
 
 You can visualize all active and inactive tab sessions by visiting:
 ```bash
-/tabmanager/debug
+/tabmanager/debug_js
+/tabmanager/debug_html
 ```
 
-Modes
+Be sure to set TABMANAGER_DEBUG in your js scope:
 
-JSON mode — default, returns structured data
-
-HTML UI — if define('SESSIONADMIN_DEBUG_UI', true) is set before including the bootstrap
+```js
+<script>
+    window.TABMANAGER_DEBUG = true;
+</script>
+```
 
 Example:
 
 ```php
 define('SESSIONADMIN_DEBUG', true);
-define('SESSIONADMIN_DEBUG_UI', true);
 require_once __DIR__ . '/bootstrap/tabmanager_bootstrap.php';
 ```
-
 
 You’ll then see an HTML table showing:
 
@@ -158,7 +164,7 @@ You’ll then see an HTML table showing:
 * Keys stored in each tab
 * Session size
 
-Each row includes a “Delete” button to clear that tab’s session data.
+Using debug_html: Each row includes a “Delete” button to clear that tab’s session data.
 
 📦 Class Overview
 TabManager

@@ -11,9 +11,10 @@ class TabManager
 {
     public function __construct()
     {
-        session_start();
-        error_log("## tab manager: construct");
-        error_log("## tab manager: construct: session: " . json_encode($_SESSION));
+        if (session_status() === PHP_SESSION_NONE) {
+            // Session is not started yet
+            session_start();
+        }
         if (!isset($_SESSION['tabmanager'])) $_SESSION['tabmanager'] = [];
         if (!isset($_SESSION['tabmanager']['tabs'])) $_SESSION['tabmanager']['tabs'] = [];
     }
@@ -26,15 +27,12 @@ class TabManager
      */
     public function indexNewTab(string $tabId): void
     {
-        error_log("## tab manager: adding new tab index: {$tabId}");
         if (!isset($_SESSION['tabmanager']['tabs'][$tabId])) {
             $_SESSION['tabmanager']['tabs'][$tabId] = [];
 
             $_SESSION['tabmanager']['tabs'][$tabId]['data'] = [];
             $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = true;
             $_SESSION['tabmanager']['tabs'][$tabId]['last_active'] = time();
-
-            error_log("## tab manager: items: " . json_encode($_SESSION['tabmanager']['tabs']));
         }
     }
 
@@ -137,7 +135,7 @@ class TabManager
 
     /**
      * Generates a UUID v4 (format: 8-4-4-4-12, example: 6ff19a11-97cb-4060-b68f-3b81836ec5f0)
-     *
+     * * (not being used in current version)
      * @return string UUID v4 lowercase
      * @throws TabManagerException
      */
@@ -163,7 +161,7 @@ class TabManager
 
     /**
      * Validates if a string is indeed a UUID (v1..v5)
-     *
+     * * (not being used in current version)
      * @param string $uuid
      * @param bool $onlyV4
      * @return bool

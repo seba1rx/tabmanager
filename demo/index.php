@@ -22,7 +22,6 @@ $pretty_sessison_data = json_encode($_SESSION, JSON_PRETTY_PRINT);
         // Optional: enable automatic tab cleanup
         window.TABMANAGER_AUTO_DESTROY = true;
         window.TABMANAGER_DEBUG = true;
-        window.TABMANAGER_DEBUG_UI = true;
     </script>
 </head>
 <body style="padding: 20px">

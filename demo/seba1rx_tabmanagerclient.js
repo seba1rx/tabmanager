@@ -128,7 +128,7 @@ const TabManagerClient = {
             TabManagerClient.notifyTabClosed();
         });
 
-        console.log('[TabManagerClient] Tab UUID:', tabId);
+        // console.log('[TabManagerClient] Tab UUID:', tabId);
     }
 };
 

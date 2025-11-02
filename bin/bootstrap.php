@@ -4,7 +4,8 @@
  *
  * Registers internal endpoints:
  *  - POST /tabmanager/tab-close
- *  - GET  /tabmanager/debug  (JSON or HTML if TABMANAGER_DEBUG_UI)
+ *  - GET  /tabmanager/debug_js  (JSON if TABMANAGER_DEBUG is true)
+ *  - GET  /tabmanager/debug_html  (HTML if TABMANAGER_DEBUG is true)
  *  - POST /tabmanager/debug/delete-tab
  *
  * if seba1rx_tabmanagerclient.js is included, some of these endpoints will be called automatically
@@ -23,7 +24,6 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         $input = json_decode(file_get_contents('php://input'), true);
         $tabId = $input['tab_id'] ?? null;
 
-        error_log("## new tab: {$tabId}");
         if ($tabId) {
             $admin = new TabManager();
             $admin->indexNewTab($tabId);
@@ -77,8 +77,8 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         exit;
     }
 
-    // --- DEBUG ENDPOINT -------------------------------------------------------
-    if ($method === 'GET' && preg_match('~^/tabmanager/debug/?$~', $uri)) {
+    // --- DEBUG ENDPOINT JS -------------------------------------------------------
+    if ($method === 'GET' && preg_match('~^/tabmanager/debug_js/?$~', $uri)) {
         $allowed =
             (defined('TABMANAGER_DEBUG') && TABMANAGER_DEBUG === true) ||
             in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1']);
@@ -93,94 +93,6 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         $tabManager = new TabManager();
         $tabs = $tabManager->debug();
 
-        // --- HTML MODE --------------------------------------------------------
-        if (defined('TABMANAGER_DEBUG_UI') && TABMANAGER_DEBUG_UI === true) {
-            header('Content-Type: text/html; charset=utf-8');
-            ?>
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="utf-8">
-                <title>Tab Manager Debug</title>
-                <style>
-                    body { font-family: system-ui, sans-serif; background: #f9f9f9; color: #333; padding: 2rem; }
-                    h1 { font-size: 1.6rem; margin-bottom: 1rem; }
-                    table { border-collapse: collapse; width: 100%; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-                    th, td { padding: 0.7rem 1rem; border-bottom: 1px solid #eee; text-align: left; vertical-align: middle; }
-                    th { background: #fafafa; font-weight: 600; }
-                    tr:hover { background: #f5f5f5; }
-                    .active { color: #0a0; font-weight: bold; }
-                    .inactive { color: #a00; font-weight: bold; }
-                    .timestamp { color: #555; font-size: 0.9rem; }
-                    .keys { font-family: monospace; color: #444; font-size: 0.9rem; }
-                    .footer { margin-top: 1rem; font-size: 0.8rem; color: #777; }
-                    button { background: #e33; color: white; border: none; border-radius: 6px; padding: 0.4rem 0.7rem; cursor: pointer; transition: 0.2s; }
-                    button:hover { background: #c00; }
-                </style>
-            </head>
-            <body>
-                <h1>Tab Manager Debug</h1>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Tab UUID</th>
-                            <th>Status</th>
-                            <th>Last Active</th>
-                            <th>Keys</th>
-                            <th>Size (bytes)</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabs-body">
-                    <?php foreach ($tabs as $tabId => $info): ?>
-                        <tr data-tab="<?= htmlspecialchars($tabId) ?>">
-                            <td><code><?= htmlspecialchars($tabId) ?></code></td>
-                            <td class="<?= $info['is_active'] ? 'active' : 'inactive' ?>">
-                                <?= $info['is_active'] ? 'Active' : 'Inactive' ?>
-                            </td>
-                            <td class="timestamp"><?= htmlspecialchars($info['last_active']) ?></td>
-                            <td class="keys"><?= htmlspecialchars(implode(', ', $info['keys'])) ?: '—' ?></td>
-                            <td><?= (int)$info['size'] ?></td>
-                            <td><button onclick="deleteTab('<?= htmlspecialchars($tabId) ?>', this)">Delete</button></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-                <div class="footer">
-                    <p><strong>Package:</strong> seba1rx/tabmanager</p>
-                    <p>Generated at <?= date('Y-m-d H:i:s') ?></p>
-                </div>
-
-                <script>
-                    async function deleteTab(tabId, btn) {
-                        if (!confirm('Delete session data for this tab?')) return;
-
-                        btn.disabled = true;
-                        btn.textContent = 'Deleting...';
-
-                        const response = await fetch('/tabmanager/debug/delete-tab', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tab_id: tabId })
-                        });
-
-                        if (response.ok) {
-                            const row = btn.closest('tr');
-                            row.style.background = '#fee';
-                            setTimeout(() => row.remove(), 300);
-                        } else {
-                            alert('Failed to delete tab.');
-                            btn.disabled = false;
-                            btn.textContent = 'Delete';
-                        }
-                    }
-                </script>
-            </body>
-            </html>
-            <?php
-            exit;
-        }
-
         // --- JSON MODE --------------------------------------------------------
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
@@ -190,6 +102,108 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
             'tabs' => $tabs,
             'session' => $_SESSION,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    // --- DEBUG ENDPOINT HTML MODE --------------------------------------------------------
+    if ($method === 'GET' && preg_match('~^/tabmanager/debug_html/?$~', $uri)) {
+        $allowed =
+            (defined('TABMANAGER_DEBUG') && TABMANAGER_DEBUG === true) ||
+            in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1']);
+
+        if (!$allowed) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Forbidden']);
+            exit;
+        }
+
+        $tabManager = new TabManager();
+        $tabs = $tabManager->debug();
+
+        header('Content-Type: text/html; charset=utf-8');
+        ?>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <title>Tab Manager Debug</title>
+            <style>
+                body { font-family: system-ui, sans-serif; background: #f9f9f9; color: #333; padding: 2rem; }
+                h1 { font-size: 1.6rem; margin-bottom: 1rem; }
+                table { border-collapse: collapse; width: 100%; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+                th, td { padding: 0.7rem 1rem; border-bottom: 1px solid #eee; text-align: left; vertical-align: middle; }
+                th { background: #fafafa; font-weight: 600; }
+                tr:hover { background: #f5f5f5; }
+                .active { color: #0a0; font-weight: bold; }
+                .inactive { color: #a00; font-weight: bold; }
+                .timestamp { color: #555; font-size: 0.9rem; }
+                .keys { font-family: monospace; color: #444; font-size: 0.9rem; }
+                .footer { margin-top: 1rem; font-size: 0.8rem; color: #777; }
+                button { background: #e33; color: white; border: none; border-radius: 6px; padding: 0.4rem 0.7rem; cursor: pointer; transition: 0.2s; }
+                button:hover { background: #c00; }
+            </style>
+        </head>
+        <body>
+            <h1>Tab Manager Debug</h1>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tab UUID</th>
+                        <th>Status</th>
+                        <th>Last Active</th>
+                        <th>Keys</th>
+                        <th>Size (bytes)</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tabs-body">
+                <?php foreach ($tabs as $tabId => $info): ?>
+                    <tr data-tab="<?= htmlspecialchars($tabId) ?>">
+                        <td><code><?= htmlspecialchars($tabId) ?></code></td>
+                        <td class="<?= $info['is_active'] ? 'active' : 'inactive' ?>">
+                            <?= $info['is_active'] ? 'Active' : 'Inactive' ?>
+                        </td>
+                        <td class="timestamp"><?= htmlspecialchars($info['last_active']) ?></td>
+                        <td class="keys"><?= htmlspecialchars(implode(', ', $info['keys'])) ?: '—' ?></td>
+                        <td><?= (int)$info['size'] ?></td>
+                        <td><button onclick="deleteTab('<?= htmlspecialchars($tabId) ?>', this)">Delete</button></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            <div class="footer">
+                <p><strong>Package:</strong> seba1rx/tabmanager</p>
+                <p>Generated at <?= date('Y-m-d H:i:s') ?></p>
+            </div>
+
+            <script>
+                async function deleteTab(tabId, btn) {
+                    if (!confirm('Delete session data for this tab?')) return;
+
+                    btn.disabled = true;
+                    btn.textContent = 'Deleting...';
+
+                    const response = await fetch('/tabmanager/debug/delete-tab', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tab_id: tabId })
+                    });
+
+                    if (response.ok) {
+                        const row = btn.closest('tr');
+                        row.style.background = '#fee';
+                        setTimeout(() => row.remove(), 300);
+                    } else {
+                        alert('Failed to delete tab.');
+                        btn.disabled = false;
+                        btn.textContent = 'Delete';
+                    }
+                }
+            </script>
+        </body>
+        </html>
+        <?php
         exit;
     }
 }

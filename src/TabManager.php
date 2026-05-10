@@ -37,13 +37,18 @@ class TabManager
     }
 
     /**
-     * Get current tab ID from cookie
+     * Get current tab ID.
+     * Header takes precedence over cookie: cookies are shared across all tabs
+     * in the same browser session, while the header is sent per-request with
+     * the correct tab UUID from sessionStorage.
      *
      * @return string|null
      */
     protected function getTabId(): ?string
     {
-        return $_COOKIE['TABMANAGER_TABID'] ?? null;
+        return $_SERVER['HTTP_X_TABMANAGER_TABID']
+            ?? $_COOKIE['TABMANAGER_TABID']
+            ?? null;
     }
 
     /**

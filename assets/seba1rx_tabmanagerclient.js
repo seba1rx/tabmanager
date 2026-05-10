@@ -86,6 +86,23 @@ const TabManagerClient = {
             return match ? decodeURIComponent(match[2]) : null;
         }
     },
+    /**
+     * Returns headers that identify the current tab.
+     * Include these in every fetch/XHR call so the PHP backend can isolate
+     * session data per tab regardless of the shared cookie value.
+     *
+     * Usage:
+     *   fetch('/my-endpoint', {
+     *       method: 'POST',
+     *       headers: { 'Content-Type': 'application/json', ...TabManagerClient.getHeaders() },
+     *       body: JSON.stringify(payload),
+     *   });
+     *
+     * @returns {Object}
+     */
+    getHeaders: () => ({
+        'X-TabManager-TabId': TabManagerClient.tab.id,
+    }),
     notifyTabClosed: () => {
         try {
             const url = '/tabmanager/tab-close'; // endpoint in your backend (automatically bootstrapped)

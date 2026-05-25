@@ -1,4 +1,5 @@
 <?php
+require __DIR__ . '/bootstrap.php';
 include __DIR__."/../vendor/autoload.php";
 session_start();
 $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
@@ -13,6 +14,8 @@ $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX
     <script>
         window.TABMANAGER_DEBUG = true;
         window.TABMANAGER_AUTO_DESTROY = true;
+        // php -S doesn't route /tabmanager/* — point to the local demo endpoint
+        window.TABMANAGER_HEARTBEAT_URL = 'heartbeat.php';
     </script>
     <script src="seba1rx_tabmanagerclient.js"></script>
     <style>

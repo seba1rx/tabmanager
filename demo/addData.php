@@ -1,4 +1,5 @@
 <?php
+require __DIR__ . '/bootstrap.php';
 include __DIR__."/../vendor/autoload.php";
 include __DIR__."/WordStringGenerator.php";
 

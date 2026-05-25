@@ -109,6 +109,24 @@ class TabManager
     }
 
     /**
+     * Update last_active timestamp for a tab (used by the JS heartbeat).
+     * Keeps the tab alive in the session without modifying its data.
+     * If the tab is not yet indexed it is created via indexNewTab().
+     *
+     * @param string $tabId
+     * @return void
+     */
+    public function touchTab(string $tabId): void
+    {
+        if (!isset($_SESSION['tabmanager']['tabs'][$tabId])) {
+            $this->indexNewTab($tabId);
+            return;
+        }
+        $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = true;
+        $_SESSION['tabmanager']['tabs'][$tabId]['last_active'] = time();
+    }
+
+    /**
      * Return all tab session data for debugging
      *
      * @return array

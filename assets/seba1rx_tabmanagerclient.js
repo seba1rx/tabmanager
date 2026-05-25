@@ -30,6 +30,13 @@ const TabManagerClient = {
          * @type {string|null}
          */
         id: null,
+
+        /**
+         * BroadcastChannel used to detect duplicate tabs and respond to ownership queries.
+         * @type {BroadcastChannel|null}
+         */
+        _ownershipChannel: null,
+
         /**
          * Generates a UUID v4-like identifier
          * @returns {string}
@@ -41,25 +48,154 @@ const TabManagerClient = {
                 return v.toString(16);
             });
         },
+
         /**
-         * Assigns or retrieves the tab UUID.
-         * Called automatically on script load.
+         * Reads or generates a candidate UUID from sessionStorage.
+         * Does NOT confirm uniqueness — call resolveUniqueId() for that.
          */
         assignTabUuid: () => {
             let uid = window.sessionStorage.getItem('unique-tab-id');
 
-            // Generate a new one if missing or window.name is not set
-            if (!uid || !window.name) {
+            // Only generate a new UUID when sessionStorage has none.
+            // window.name is NOT used as a condition: it can be empty after a
+            // browser crash-restore or in certain privacy modes even when
+            // sessionStorage still holds the correct UUID, which would cause
+            // a spurious new UUID to be generated on reload.
+            if (!uid) {
                 uid = TabManagerClient.tab.generateUuid();
                 window.sessionStorage.setItem('unique-tab-id', uid);
-                window.name = uid;
             }
 
-            // Sync both sources
             TabManagerClient.tab.id = uid;
             window.name = uid;
         },
+
+        /**
+         * Checks via BroadcastChannel whether another tab already owns candidateId.
+         * If so, returns a fresh UUID. Otherwise returns candidateId unchanged.
+         *
+         * Handles duplicate tabs: when a tab is duplicated the browser copies
+         * sessionStorage, so both tabs would share the same UUID. The original tab
+         * is already running its ownership listener and will respond to the query,
+         * causing the duplicate to generate a new UUID.
+         *
+         * Limitation: if the original tab is frozen (suspended by the browser after
+         * prolonged inactivity) its JS is paused and cannot respond. In that case
+         * the duplicate keeps the UUID. The heartbeat mechanism reduces the window
+         * for this scenario by keeping last_active fresh on the server while the
+         * original tab is visible.
+         *
+         * @param {string} candidateId
+         * @returns {Promise<string>}
+         */
+        resolveUniqueId: (candidateId) => {
+            return new Promise((resolve) => {
+                if (!window.BroadcastChannel) {
+                    resolve(candidateId);
+                    return;
+                }
+
+                const channel = new BroadcastChannel('tabmanager-ownership');
+                let claimed = false;
+
+                channel.onmessage = (event) => {
+                    const { type, tabId } = event.data ?? {};
+                    if (type === 'ownership-ack' && tabId === candidateId) {
+                        claimed = true;
+                    }
+                };
+
+                channel.postMessage({ type: 'ownership-query', tabId: candidateId });
+
+                setTimeout(() => {
+                    channel.close();
+                    if (claimed) {
+                        resolve(TabManagerClient.tab.generateUuid());
+                    } else {
+                        resolve(candidateId);
+                    }
+                }, 80);
+            });
+        },
+
+        /**
+         * Opens a persistent BroadcastChannel that responds to ownership queries
+         * from other tabs. Must be called after the tab's UUID is confirmed.
+         */
+        startOwnershipListener: () => {
+            if (!window.BroadcastChannel) return;
+
+            if (TabManagerClient.tab._ownershipChannel) {
+                TabManagerClient.tab._ownershipChannel.close();
+            }
+
+            TabManagerClient.tab._ownershipChannel = new BroadcastChannel('tabmanager-ownership');
+            TabManagerClient.tab._ownershipChannel.onmessage = (event) => {
+                const { type, tabId } = event.data ?? {};
+                if (type === 'ownership-query' && tabId === TabManagerClient.tab.id) {
+                    TabManagerClient.tab._ownershipChannel.postMessage({
+                        type: 'ownership-ack',
+                        tabId: TabManagerClient.tab.id,
+                    });
+                }
+            };
+        },
     },
+
+    /**
+     * Periodic heartbeat that keeps last_active fresh on the server.
+     *
+     * Runs only while the tab is visible (Page Visibility API). Stops
+     * automatically when the browser freezes or hides the tab, and resumes
+     * with an immediate beat when the tab becomes visible again.
+     *
+     * The backend endpoint is configured via window.TABMANAGER_HEARTBEAT_URL
+     * (useful for setups where /tabmanager/* routes are unavailable, e.g.
+     * php -S without a router). Falls back to /tabmanager/heartbeat.
+     *
+     * Interval defaults to 30 s and can be overridden via
+     * window.TABMANAGER_HEARTBEAT_INTERVAL (milliseconds).
+     */
+    heartbeat: {
+        _timer: null,
+
+        get url() {
+            return window.TABMANAGER_HEARTBEAT_URL ?? '/tabmanager/heartbeat';
+        },
+
+        get intervalMs() {
+            return window.TABMANAGER_HEARTBEAT_INTERVAL ?? 30000;
+        },
+
+        send: async () => {
+            try {
+                await fetch(TabManagerClient.heartbeat.url, {
+                    method: 'POST',
+                    headers: TabManagerClient.getHeaders(),
+                });
+            } catch (e) {
+                if (window.TABMANAGER_DEBUG) {
+                    console.warn('[TabManagerClient] Heartbeat failed:', e);
+                }
+            }
+        },
+
+        start: () => {
+            if (TabManagerClient.heartbeat._timer) return;
+            TabManagerClient.heartbeat._timer = setInterval(
+                TabManagerClient.heartbeat.send,
+                TabManagerClient.heartbeat.intervalMs
+            );
+        },
+
+        stop: () => {
+            if (TabManagerClient.heartbeat._timer) {
+                clearInterval(TabManagerClient.heartbeat._timer);
+                TabManagerClient.heartbeat._timer = null;
+            }
+        },
+    },
+
     /**
      * Cookie utilities
      */
@@ -86,6 +222,7 @@ const TabManagerClient = {
             return match ? decodeURIComponent(match[2]) : null;
         }
     },
+
     /**
      * Returns headers that identify the current tab.
      * Include these in every fetch/XHR call so the PHP backend can isolate
@@ -103,18 +240,10 @@ const TabManagerClient = {
     getHeaders: () => ({
         'X-TabManager-TabId': TabManagerClient.tab.id,
     }),
+
     notifyTabClosed: () => {
         try {
-            const url = '/tabmanager/tab-close'; // endpoint in your backend (automatically bootstrapped)
-            const data = { tab_id: TabManagerClient.tab.id };
-            navigator.sendBeacon(url, JSON.stringify(data));
-        } catch (e) {
-            console.warn('[TabManagerClient] Could not send tab close event:', e);
-        }
-    },
-    notifyNewTab: () => {
-        try {
-            const url = '/tabmanager/new-tab'; // endpoint in your backend (automatically bootstrapped)
+            const url = '/tabmanager/tab-close';
             const data = { tab_id: TabManagerClient.tab.id };
             navigator.sendBeacon(url, JSON.stringify(data));
         } catch (e) {
@@ -122,13 +251,44 @@ const TabManagerClient = {
         }
     },
 
+    notifyNewTab: () => {
+        try {
+            const url = '/tabmanager/new-tab';
+            const data = { tab_id: TabManagerClient.tab.id };
+            navigator.sendBeacon(url, JSON.stringify(data));
+        } catch (e) {
+            console.warn('[TabManagerClient] Could not send new tab event:', e);
+        }
+    },
+
     /**
      * Initializes the tab manager client:
-     * - Assigns tab UUID
+     * - Assigns tab UUID (resolving duplicates via BroadcastChannel)
      * - Sets the identifying cookie
+     * - Registers ownership listener so future duplicate tabs can detect this one
+     * - Starts the heartbeat while the tab is visible
+     *
+     * @returns {Promise<void>}
      */
-    init: () => {
+    init: async () => {
+        // Get or generate a candidate UUID from sessionStorage
         TabManagerClient.tab.assignTabUuid();
+        const candidateId = TabManagerClient.tab.id;
+
+        // Verify uniqueness: if another tab already owns this UUID (e.g. we are a
+        // duplicate tab whose sessionStorage was copied from the original) a new
+        // UUID is returned so each tab stays isolated.
+        const confirmedId = await TabManagerClient.tab.resolveUniqueId(candidateId);
+
+        if (confirmedId !== candidateId) {
+            TabManagerClient.tab.id = confirmedId;
+            window.sessionStorage.setItem('unique-tab-id', confirmedId);
+            window.name = confirmedId;
+        }
+
+        // Start responding to ownership queries from future duplicate tabs
+        TabManagerClient.tab.startOwnershipListener();
+
         const tabId = TabManagerClient.tab.id;
         const cookieName = 'TABMANAGER_TABID';
         const currentCookie = TabManagerClient.cookie.get(cookieName);
@@ -137,17 +297,56 @@ const TabManagerClient = {
             TabManagerClient.cookie.set(cookieName, tabId);
         }
 
-        // notify backend to index the tab
+        // Notify backend to index the tab
         TabManagerClient.notifyNewTab(tabId);
 
         // Notify backend softly when tab is closing
         window.addEventListener('beforeunload', () => {
+            TabManagerClient.heartbeat.stop();
             TabManagerClient.notifyTabClosed();
         });
 
-        console.log('[TabManagerClient] Tab UUID:', tabId);
-    }
+        // Heartbeat: run only while the tab is visible.
+        // On visibilitychange to visible (tab unfreeze or user switching back):
+        // send an immediate beat then resume the interval.
+        if (document.visibilityState === 'visible') {
+            TabManagerClient.heartbeat.start();
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                TabManagerClient.heartbeat.send();
+                TabManagerClient.heartbeat.start();
+            } else {
+                TabManagerClient.heartbeat.stop();
+            }
+        });
+
+        if (window.TABMANAGER_DEBUG) {
+            console.log(
+                '[TabManagerClient] Tab UUID:', tabId,
+                candidateId !== confirmedId ? '(reassigned — duplicate tab detected)' : ''
+            );
+        }
+    },
+
+    /**
+     * Promise that resolves once init() has completed.
+     * Await this before reading TabManagerClient.tab.id in consumer scripts.
+     *
+     * Example:
+     *   await TabManagerClient.ready;
+     *   const headers = TabManagerClient.getHeaders();
+     *
+     * @type {Promise<void>}
+     */
+    ready: null,
 };
 
-// Run automatically on load
-document.addEventListener('DOMContentLoaded', TabManagerClient.init);
+// Run automatically on DOMContentLoaded and expose the completion promise.
+TabManagerClient.ready = new Promise((resolve) => {
+    document.addEventListener('DOMContentLoaded', async () => {
+        await TabManagerClient.init();
+        resolve();
+    });
+});

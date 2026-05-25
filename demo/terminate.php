@@ -1,4 +1,5 @@
 <?php
+require __DIR__ . '/bootstrap.php';
 /** destroy session */
 session_start();
 $_SESSION = [];

@@ -98,12 +98,23 @@ async function addData() {
     }
 }
 
+async function ensureTabRegistered() {
+    // session.php registers the tab if absent (idempotent) and returns the
+    // full session in one request — no separate /tabmanager/new-tab call needed.
+    const res = await fetch('session.php', { headers: TabManagerClient.getHeaders() });
+    const fresh = await res.json();
+    renderSessionData(fresh);
+}
+
 function reset() {
     window.location.href = 'terminate.php';
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Wait for TabManagerClient.init() to finish (includes duplicate-tab UUID resolution)
+    await TabManagerClient.ready;
+
     const tabIdEl = document.getElementById('tabid');
     if (tabIdEl) tabIdEl.textContent = TabManagerClient.tab.id ?? '—';
-    renderSessionData(window.__INITIAL_SESSION__);
+    ensureTabRegistered();
 });

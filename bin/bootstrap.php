@@ -35,6 +35,19 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         exit;
     }
 
+    // --- HEARTBEAT ENDPOINT ---------------------------------------------------
+    if ($method === 'POST' && preg_match('~^/tabmanager/heartbeat/?$~', $uri)) {
+        $tabId = $_SERVER['HTTP_X_TABMANAGER_TABID'] ?? null;
+
+        if ($tabId) {
+            $admin = new TabManager();
+            $admin->touchTab($tabId);
+        }
+
+        http_response_code(204);
+        exit;
+    }
+
     // --- TAB CLOSE ENDPOINT ---------------------------------------------------
     if ($method === 'POST' && preg_match('~^/tabmanager/tab-close/?$~', $uri)) {
         $input = json_decode(file_get_contents('php://input'), true);

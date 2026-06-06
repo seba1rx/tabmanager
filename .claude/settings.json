@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git -C /home/legion/dev/proyectos/tabmanager diff --stat)"
+      "Bash(git -C /home/legion/dev/proyectos/tabmanager diff --stat)",
+      "Bash(php /home/legion/dev/proyectos/tabmanager/vendor/bin/phpunit --version)",
+      "Bash(composer install *)",
+      "Bash(composer require *)",
+      "Bash(git -C /home/legion/dev/proyectos/tabmanager diff HEAD --stat)",
+      "Bash(git -C /home/legion/dev/proyectos/tabmanager status --short)"
     ]
   }
 }

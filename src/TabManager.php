@@ -37,6 +37,22 @@ class TabManager
     }
 
     /**
+     * Validates that a string is a well-formed UUID v4.
+     * Used by bootstrap.php to reject arbitrary strings before they reach
+     * the session. Also available to consumers for their own validation.
+     *
+     * @param string $id
+     * @return bool
+     */
+    public static function isValidTabId(string $id): bool
+    {
+        return (bool) preg_match(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',
+            $id
+        );
+    }
+
+    /**
      * Get current tab ID.
      * Header takes precedence over cookie: cookies are shared across all tabs
      * in the same browser session, while the header is sent per-request with
@@ -52,6 +68,18 @@ class TabManager
     }
 
     /**
+     * Get current tab ID from the request header only — no cookie fallback.
+     * Use this in endpoints that handle sensitive data and must not accept
+     * the shared cookie as a tab identifier.
+     *
+     * @return string|null
+     */
+    public function getTabIdStrict(): ?string
+    {
+        return $_SERVER['HTTP_X_TABMANAGER_TABID'] ?? null;
+    }
+
+    /**
      * Set session data for this tab
      *
      * @param string $key
@@ -61,7 +89,10 @@ class TabManager
     public function set(string $key, mixed $value): void
     {
         $tabId = $this->getTabId();
-        if (!$tabId) return;
+        // SEC-04: only write to tabs that were explicitly registered via
+        // indexNewTab(). Avoids implicit session slot creation from arbitrary
+        // header/cookie values.
+        if (!$tabId || !isset($_SESSION['tabmanager']['tabs'][$tabId])) return;
 
         $_SESSION['tabmanager']['tabs'][$tabId]['data'][$key] = $value;
         $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = true;

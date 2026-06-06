@@ -29,6 +29,14 @@
     "require": {
         "php": ">=8.1"
     },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Seba1rx\\TabManager\\Tests\\": "tests/"
+        }
+    },
     "minimum-stability": "stable",
     "prefer-stable": true
 }

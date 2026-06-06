@@ -1,7 +1,15 @@
 <?php
-require __DIR__ . '/bootstrap.php';
-include __DIR__."/../vendor/autoload.php";
+/**
+ * INTEGRATION STEP: include the autoloader.
+ * bootstrap.php (registered under Composer "files" autoload) runs automatically
+ * here and registers all /tabmanager/* endpoints. No extra configuration needed.
+ */
+require __DIR__ . '/bootstrap.php';        // demo-only: redirects session storage to demo/sessions/
+include __DIR__ . '/../vendor/autoload.php';
+
 session_start();
+
+// Pre-load the current session state so the page can render without a second AJAX call.
 $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 ?>
 <!DOCTYPE html>
@@ -11,13 +19,33 @@ $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TabManager — Demo</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!--
+        INTEGRATION STEP: configure the JS client before loading it.
+
+        window.TABMANAGER_HEARTBEAT_URL overrides the default heartbeat endpoint
+        (/tabmanager/heartbeat). That default works in any setup where all requests
+        are routed through a PHP front controller (frameworks, SPAs with a catch-all).
+
+        This demo runs with `php -S` which serves files directly without a router,
+        so /tabmanager/* paths return 404. heartbeat.php is the workaround.
+    -->
     <script>
-        window.TABMANAGER_DEBUG = true;
-        window.TABMANAGER_AUTO_DESTROY = true;
-        // php -S doesn't route /tabmanager/* — point to the local demo endpoint
+        window.TABMANAGER_DEBUG       = true;
         window.TABMANAGER_HEARTBEAT_URL = 'heartbeat.php';
     </script>
+
+    <!--
+        INTEGRATION STEP: load the JS client.
+        It runs automatically on DOMContentLoaded:
+          1. Reads or generates a UUID from sessionStorage
+          2. Checks via BroadcastChannel that no other tab owns the UUID (duplicate detection)
+          3. Sets the TABMANAGER_TABID cookie as fallback
+          4. Notifies the backend of the new tab
+          5. Starts the heartbeat while the tab is visible
+    -->
     <script src="seba1rx_tabmanagerclient.js"></script>
+
     <style>
         body { background: #f0f2f5; }
         .navbar-brand span.pkg { font-size: .75rem; opacity: .6; font-weight: 400; }
@@ -36,7 +64,7 @@ $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX
             TabManager
             <span class="pkg ms-2">seba1rx/tabmanager</span>
         </span>
-        <a href="/tabmanager/debug_html" target="_blank" class="btn btn-sm btn-outline-light">
+        <a href="debug.php" target="_blank" class="btn btn-sm btn-outline-light">
             Debug view
         </a>
     </div>
@@ -49,6 +77,7 @@ $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX
             <div class="d-flex align-items-center gap-3">
                 <div>
                     <div class="text-muted small mb-1">Current tab UUID</div>
+                    <!-- Populated by app.js after TabManagerClient.ready resolves -->
                     <span id="tabid" class="tab-uuid text-primary">—</span>
                 </div>
                 <span id="tab-status" class="badge bg-success ms-auto">active</span>

@@ -3,12 +3,12 @@
  * TabManager bootstrap
  *
  * Registers internal endpoints:
+ *  - POST /tabmanager/new-tab
+ *  - POST /tabmanager/heartbeat
  *  - POST /tabmanager/tab-close
- *  - GET  /tabmanager/debug_js  (JSON if TABMANAGER_DEBUG is true)
- *  - GET  /tabmanager/debug_html  (HTML if TABMANAGER_DEBUG is true)
- *  - POST /tabmanager/debug/delete-tab
- *
- * if seba1rx_tabmanagerclient.js is included, some of these endpoints will be called automatically
+ *  - GET  /tabmanager/debug_js    (requires TABMANAGER_DEBUG=true)
+ *  - GET  /tabmanager/debug_html  (requires TABMANAGER_DEBUG=true)
+ *  - POST /tabmanager/debug/delete-tab (requires TABMANAGER_DEBUG=true)
  */
 
 use Seba1rx\TabManager\TabManager;
@@ -16,7 +16,9 @@ use Seba1rx\TabManager\TabManager;
 if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
     define('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__', true);
 
-    $uri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    // SEC-06: parse_url() returns null for malformed URIs; cast to string to
+    // avoid passing null to preg_match() (TypeError in PHP 8.1+).
+    $uri    = (string) (parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?? '');
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
     // --- NEW TAB ENDPOINT ---------------------------------------------------
@@ -24,22 +26,25 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         $input = json_decode(file_get_contents('php://input'), true);
         $tabId = $input['tab_id'] ?? null;
 
-        if ($tabId) {
+        // SEC-03: reject any tab_id that is not a valid UUID v4.
+        if ($tabId && TabManager::isValidTabId($tabId)) {
             $admin = new TabManager();
             $admin->indexNewTab($tabId);
         }
 
-        http_response_code(204);
+        // SEC-07: 200 with body; 204 must not carry a response body (RFC 7230).
+        http_response_code(200);
         header('Content-Type: application/json');
         echo json_encode(['status' => 'ok']);
         exit;
     }
 
-    // --- HEARTBEAT ENDPOINT ---------------------------------------------------
+    // --- HEARTBEAT ENDPOINT -------------------------------------------------
     if ($method === 'POST' && preg_match('~^/tabmanager/heartbeat/?$~', $uri)) {
         $tabId = $_SERVER['HTTP_X_TABMANAGER_TABID'] ?? null;
 
-        if ($tabId) {
+        // SEC-03: validate UUID before touching the session.
+        if ($tabId && TabManager::isValidTabId($tabId)) {
             $admin = new TabManager();
             $admin->touchTab($tabId);
         }
@@ -48,39 +53,43 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         exit;
     }
 
-    // --- TAB CLOSE ENDPOINT ---------------------------------------------------
+    // --- TAB CLOSE ENDPOINT -------------------------------------------------
     if ($method === 'POST' && preg_match('~^/tabmanager/tab-close/?$~', $uri)) {
         $input = json_decode(file_get_contents('php://input'), true);
         $tabId = $input['tab_id'] ?? null;
 
-        if ($tabId) {
+        // SEC-03: validate UUID before touching the session.
+        if ($tabId && TabManager::isValidTabId($tabId)) {
             $admin = new TabManager();
             $admin->markInactiveTab($tabId);
         }
 
-        http_response_code(204);
+        // SEC-07: 200 with body; 204 must not carry a response body (RFC 7230).
+        http_response_code(200);
         header('Content-Type: application/json');
         echo json_encode(['status' => 'ok']);
         exit;
     }
 
-    // --- DELETE TAB ENDPOINT ---------------------------------------------------
+    // --- DEBUG: DELETE TAB --------------------------------------------------
     if ($method === 'POST' && preg_match('~^/tabmanager/debug/delete-tab/?$~', $uri)) {
-        $input = json_decode(file_get_contents('php://input'), true);
-        $tabId = $input['tab_id'] ?? null;
 
-        $allowed =
-            (defined('TABMANAGER_DEBUG') && TABMANAGER_DEBUG === true) ||
-            in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1']);
-
-        if (!$allowed) {
+        // SEC-02: REMOTE_ADDR is always the proxy IP in reverse-proxy setups,
+        // making localhost checks unreliable. TABMANAGER_DEBUG is the only
+        // trustworthy gate — it must be explicitly set in application code
+        // and must never be defined in production.
+        if (!defined('TABMANAGER_DEBUG') || TABMANAGER_DEBUG !== true) {
             http_response_code(403);
             header('Content-Type: application/json');
             echo json_encode(['error' => 'Forbidden']);
             exit;
         }
 
-        if ($tabId) {
+        $input = json_decode(file_get_contents('php://input'), true);
+        $tabId = $input['tab_id'] ?? null;
+
+        // SEC-03: validate UUID before touching the session.
+        if ($tabId && TabManager::isValidTabId($tabId)) {
             $tabManager = new TabManager();
             $tabManager->destroyTabSession($tabId);
         }
@@ -90,13 +99,11 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         exit;
     }
 
-    // --- DEBUG ENDPOINT JS -------------------------------------------------------
+    // --- DEBUG: JSON DUMP ---------------------------------------------------
     if ($method === 'GET' && preg_match('~^/tabmanager/debug_js/?$~', $uri)) {
-        $allowed =
-            (defined('TABMANAGER_DEBUG') && TABMANAGER_DEBUG === true) ||
-            in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1']);
 
-        if (!$allowed) {
+        // SEC-02: only TABMANAGER_DEBUG grants access; REMOTE_ADDR removed.
+        if (!defined('TABMANAGER_DEBUG') || TABMANAGER_DEBUG !== true) {
             http_response_code(403);
             header('Content-Type: application/json');
             echo json_encode(['error' => 'Forbidden']);
@@ -104,27 +111,26 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         }
 
         $tabManager = new TabManager();
-        $tabs = $tabManager->debug();
+        $tabs       = $tabManager->debug();
 
-        // --- JSON MODE --------------------------------------------------------
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
-            'package' => 'seba1rx/tabManager',
-            'version' => '1.0.0',
-            'session_key' => $tabManager->getSessionKey(),
-            'tabs' => $tabs,
-            'session' => $_SESSION,
+            'package'             => 'seba1rx/tabmanager',
+            'version'             => '1.0.0',
+            'session_key'         => $tabManager->getSessionKey(),
+            'tabs'                => $tabs,
+            // SEC-01: only expose the tabmanager slice of $_SESSION, not the
+            // full session (which may contain auth tokens, user data, etc.).
+            'tabmanager_session'  => $_SESSION['tabmanager'] ?? [],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         exit;
     }
 
-    // --- DEBUG ENDPOINT HTML MODE --------------------------------------------------------
+    // --- DEBUG: HTML TABLE --------------------------------------------------
     if ($method === 'GET' && preg_match('~^/tabmanager/debug_html/?$~', $uri)) {
-        $allowed =
-            (defined('TABMANAGER_DEBUG') && TABMANAGER_DEBUG === true) ||
-            in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1']);
 
-        if (!$allowed) {
+        // SEC-02: only TABMANAGER_DEBUG grants access; REMOTE_ADDR removed.
+        if (!defined('TABMANAGER_DEBUG') || TABMANAGER_DEBUG !== true) {
             http_response_code(403);
             header('Content-Type: application/json');
             echo json_encode(['error' => 'Forbidden']);
@@ -132,7 +138,7 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         }
 
         $tabManager = new TabManager();
-        $tabs = $tabManager->debug();
+        $tabs       = $tabManager->debug();
 
         header('Content-Type: text/html; charset=utf-8');
         ?>

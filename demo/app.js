@@ -1,3 +1,10 @@
+/**
+ * app.js — Demo application logic
+ *
+ * This file shows how a consumer app integrates with TabManagerClient.
+ * Key integration points are marked with "INTEGRATION:" comments.
+ */
+
 function escapeHtml(str) {
     return String(str)
         .replace(/&/g, '&amp;')
@@ -6,6 +13,10 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
+/**
+ * Renders the full session state returned by the server.
+ * Shows data from all known tabs, highlighting the current one.
+ */
 function renderSessionData(session) {
     const currentTabId = TabManagerClient.tab.id;
     const tabs = session?.tabmanager?.tabs ?? {};
@@ -74,6 +85,16 @@ function renderSessionData(session) {
     container.innerHTML = sections;
 }
 
+/**
+ * INTEGRATION: sending data to a PHP endpoint with tab isolation.
+ *
+ * The critical part is spreading TabManagerClient.getHeaders() into the
+ * fetch headers. This adds the X-TabManager-TabId header so the PHP backend
+ * can call $tabManager->set() / ->get() and know which tab to read/write.
+ *
+ * Omitting getHeaders() would cause the backend to fall back to the shared
+ * cookie — all tabs would read/write the same session slot.
+ */
 async function addData() {
     const btn = document.getElementById('btn-add');
     const spinner = document.getElementById('btn-spinner');
@@ -83,7 +104,10 @@ async function addData() {
     try {
         const response = await fetch('addData.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...TabManagerClient.getHeaders() }
+            headers: {
+                'Content-Type': 'application/json',
+                ...TabManagerClient.getHeaders(), // INTEGRATION: tab identification header
+            },
         });
 
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
@@ -98,23 +122,47 @@ async function addData() {
     }
 }
 
+/**
+ * INTEGRATION: fetching session state for this tab.
+ *
+ * session.php registers the tab if not already known (idempotent) and
+ * returns the full $_SESSION so the UI can display all tabs' data.
+ *
+ * In a real app this would be your own endpoint. The only requirement is
+ * that it includes ...TabManagerClient.getHeaders() in the request so the
+ * PHP backend can identify the calling tab.
+ *
+ * Note: this demo uses session.php instead of the built-in /tabmanager/new-tab
+ * endpoint because `php -S` does not route /tabmanager/* without a router.
+ */
 async function ensureTabRegistered() {
-    // session.php registers the tab if absent (idempotent) and returns the
-    // full session in one request — no separate /tabmanager/new-tab call needed.
-    const res = await fetch('session.php', { headers: TabManagerClient.getHeaders() });
-    const fresh = await res.json();
-    renderSessionData(fresh);
+    const res = await fetch('session.php', {
+        headers: TabManagerClient.getHeaders(), // INTEGRATION: tab identification header
+    });
+    const session = await res.json();
+    renderSessionData(session);
 }
 
 function reset() {
     window.location.href = 'terminate.php';
 }
 
+/**
+ * INTEGRATION: waiting for TabManagerClient.ready.
+ *
+ * TabManagerClient.init() is async — it waits ~80 ms for the BroadcastChannel
+ * duplicate-tab check to complete before the UUID is confirmed.
+ *
+ * Any code that reads TabManagerClient.tab.id or calls getHeaders() must run
+ * AFTER TabManagerClient.ready resolves. If you read tab.id synchronously on
+ * DOMContentLoaded you will get null.
+ */
 document.addEventListener('DOMContentLoaded', async () => {
-    // Wait for TabManagerClient.init() to finish (includes duplicate-tab UUID resolution)
-    await TabManagerClient.ready;
+    await TabManagerClient.ready; // wait for UUID to be confirmed and unique
 
+    // Safe to use tab.id from here
     const tabIdEl = document.getElementById('tabid');
     if (tabIdEl) tabIdEl.textContent = TabManagerClient.tab.id ?? '—';
+
     ensureTabRegistered();
 });

@@ -177,7 +177,7 @@ public function getTabIdStrict(): ?string
 
 The existing `getTabId()` (with fallback) is preserved for non-AJAX page-load requests where the cookie is the only available identifier.
 
-**Implementation notes:** `getTabIdStrict()` added to `src/TabManager.php`. README updated with usage guidance. 2026-05-25.
+**Implementation notes:** `getTabIdStrict()` added to `src/TabManager.php`. README updated with usage guidance. 2026-05-25. `test_set_header_takes_priority_over_cookie` added 2026-06-07 — explicitly asserts header beats cookie when both are present, preventing silent regression of the core isolation guarantee.
 
 ---
 

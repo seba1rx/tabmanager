@@ -172,7 +172,9 @@ class TabManagerTest extends TestCase
     {
         new TabManager($this->store);
 
-        $this->assertIsArray($this->store->get('tabmanager')['tabs']);
+        $tabmanager = $this->store->get('tabmanager');
+        $this->assertIsArray($tabmanager);
+        $this->assertSame([], $tabmanager['tabs']);
     }
 
     public function test_construct_does_not_overwrite_existing_tabs(): void
@@ -232,15 +234,19 @@ class TabManagerTest extends TestCase
         $tm = new TabManager($this->store);
         $tm->indexNewTab(self::UUID_A);
 
-        // Inject data directly into the store
+        // Snapshot state after first registration and inject extra data
         $tabmanager = $this->store->get('tabmanager');
         $tabmanager['tabs'][self::UUID_A]['data']['existing'] = 'preserved';
+        $originalIsActive   = $tabmanager['tabs'][self::UUID_A]['is_active'];
+        $originalLastActive = $tabmanager['tabs'][self::UUID_A]['last_active'];
         $this->store->set('tabmanager', $tabmanager);
 
-        // Second call must not overwrite
+        // Second call must be a complete no-op
         $tm->indexNewTab(self::UUID_A);
 
-        $this->assertSame('preserved', $this->tabData(self::UUID_A)['data']['existing']);
+        $this->assertSame('preserved',         $this->tabData(self::UUID_A)['data']['existing']);
+        $this->assertSame($originalIsActive,   $this->tabData(self::UUID_A)['is_active']);
+        $this->assertSame($originalLastActive, $this->tabData(self::UUID_A)['last_active']);
     }
 
     // -------------------------------------------------------------------------
@@ -299,9 +305,16 @@ class TabManagerTest extends TestCase
 
         $this->assertArrayNotHasKey(self::UUID_A, $this->tabs());
 
+        $before = time();
         $tm->touchTab(self::UUID_A);
+        $after = time();
 
+        $tab = $this->tabData(self::UUID_A);
         $this->assertArrayHasKey(self::UUID_A, $this->tabs());
+        $this->assertSame([], $tab['data']);
+        $this->assertTrue($tab['is_active']);
+        $this->assertGreaterThanOrEqual($before, $tab['last_active']);
+        $this->assertLessThanOrEqual($after, $tab['last_active']);
     }
 
     // -------------------------------------------------------------------------
@@ -344,6 +357,8 @@ class TabManagerTest extends TestCase
         $tm = new TabManager($this->store);
         $tm->indexNewTab(self::UUID_A);
         $tm->markInactiveTab(self::UUID_A);
+
+        $this->assertFalse($this->tabData(self::UUID_A)['is_active']); // pre-condition
 
         $tm->set('x', 1);
 
@@ -392,6 +407,21 @@ class TabManagerTest extends TestCase
         $tm->set('source', 'cookie');
 
         $this->assertSame('cookie', $this->tabData(self::UUID_A)['data']['source']);
+    }
+
+    public function test_set_header_takes_priority_over_cookie(): void
+    {
+        // Both present — header (UUID_A) must win over cookie (UUID_B)
+        $this->withHeader(self::UUID_A);
+        $this->withCookie(self::UUID_B);
+        $tm = new TabManager($this->store);
+        $tm->indexNewTab(self::UUID_A);
+        $tm->indexNewTab(self::UUID_B);
+
+        $tm->set('source', 'header');
+
+        $this->assertSame('header', $this->tabData(self::UUID_A)['data']['source']);
+        $this->assertSame([],       $this->tabData(self::UUID_B)['data']);
     }
 
     public function test_set_handles_various_value_types(): void
@@ -457,6 +487,21 @@ class TabManagerTest extends TestCase
         $this->assertNull($tm->get('key'));
     }
 
+    public function test_get_does_not_leak_between_tabs(): void
+    {
+        $tm = new TabManager($this->store);
+
+        $this->withHeader(self::UUID_A);
+        $tm->indexNewTab(self::UUID_A);
+        $tm->set('secret', 'alpha');
+
+        // Switch to a different tab — UUID_A's value must not be visible
+        $this->withHeader(self::UUID_B);
+        $tm->indexNewTab(self::UUID_B);
+
+        $this->assertNull($tm->get('secret'));
+    }
+
     // -------------------------------------------------------------------------
     // markInactiveTab
     // -------------------------------------------------------------------------
@@ -517,9 +562,16 @@ class TabManagerTest extends TestCase
         $tm->indexNewTab(self::UUID_A);
         $tm->indexNewTab(self::UUID_B);
 
+        // Give UUID_B data to verify it survives intact
+        $tabmanager = $this->store->get('tabmanager');
+        $tabmanager['tabs'][self::UUID_B]['data']['key'] = 'intact';
+        $this->store->set('tabmanager', $tabmanager);
+
         $tm->destroyTabSession(self::UUID_A);
 
-        $this->assertArrayHasKey(self::UUID_B, $this->tabs());
+        $this->assertArrayNotHasKey(self::UUID_A, $this->tabs());
+        $this->assertArrayHasKey(self::UUID_B,    $this->tabs());
+        $this->assertSame('intact', $this->tabData(self::UUID_B)['data']['key']);
     }
 
     public function test_destroyTabSession_noop_for_unregistered_tab(): void
@@ -583,8 +635,11 @@ class TabManagerTest extends TestCase
 
         $result = $tm->debug();
 
+        $this->assertCount(2,       $result[self::UUID_A]['keys']);
         $this->assertContains('name', $result[self::UUID_A]['keys']);
         $this->assertContains('role', $result[self::UUID_A]['keys']);
+        $this->assertNotContains('Alice', $result[self::UUID_A]['keys']);
+        $this->assertNotContains('admin', $result[self::UUID_A]['keys']);
     }
 
     public function test_debug_size_matches_json_encoded_data(): void
@@ -595,7 +650,7 @@ class TabManagerTest extends TestCase
         $tm->set('x', 'hello');
 
         $result   = $tm->debug();
-        $expected = strlen(json_encode($this->tabData(self::UUID_A)['data']));
+        $expected = \strlen(\json_encode($this->tabData(self::UUID_A)['data']));
 
         $this->assertSame($expected, $result[self::UUID_A]['size']);
     }
@@ -673,6 +728,25 @@ class TabManagerTest extends TestCase
         $this->assertFalse($tm->isTabIndexed());
     }
 
+    public function testIsTabIndexedReturnsTrueForInactiveTab(): void
+    {
+        $tm = new TabManager($this->store);
+        $tm->indexNewTab(self::UUID_A);
+        $tm->markInactiveTab(self::UUID_A);
+
+        // Inactive ≠ unregistered — the slot still exists
+        $this->assertTrue($tm->isTabIndexed(self::UUID_A));
+    }
+
+    public function testIsTabIndexedReturnsFalseAfterDestroyTabSession(): void
+    {
+        $tm = new TabManager($this->store);
+        $tm->indexNewTab(self::UUID_A);
+        $tm->destroyTabSession(self::UUID_A);
+
+        $this->assertFalse($tm->isTabIndexed(self::UUID_A));
+    }
+
     // -------------------------------------------------------------------------
     // cleanupInactiveTabs
     // -------------------------------------------------------------------------
@@ -734,6 +808,49 @@ class TabManagerTest extends TestCase
         $removed = $tm->cleanupInactiveTabs(3600);
 
         $this->assertSame(0, $removed);
+        $this->assertArrayHasKey(self::UUID_A, $this->tabs());
+    }
+
+    public function testCleanupInactiveTabsPartialRemoval(): void
+    {
+        $tm = new TabManager($this->store);
+        $tm->indexNewTab(self::UUID_A);
+        $tm->indexNewTab(self::UUID_B);
+        $tm->indexNewTab(self::UUID_C);
+
+        $tabmanager = $this->store->get('tabmanager');
+        // UUID_A: stale + inactive → eligible for removal
+        $tabmanager['tabs'][self::UUID_A]['is_active']   = false;
+        $tabmanager['tabs'][self::UUID_A]['last_active']  = time() - 7200;
+        // UUID_B: active, recent (default from indexNewTab) → not eligible
+        // UUID_C: inactive but only 100 s ago → below the 3600 s threshold
+        $tabmanager['tabs'][self::UUID_C]['is_active']   = false;
+        $tabmanager['tabs'][self::UUID_C]['last_active']  = time() - 100;
+        $this->store->set('tabmanager', $tabmanager);
+
+        $removed = $tm->cleanupInactiveTabs(3600);
+
+        $this->assertSame(1, $removed);
+        $this->assertArrayNotHasKey(self::UUID_A, $this->tabs());
+        $this->assertArrayHasKey(self::UUID_B,    $this->tabs());
+        $this->assertArrayHasKey(self::UUID_C,    $this->tabs());
+    }
+
+    public function testCleanupInactiveTabsNegativeThreshold(): void
+    {
+        $tm = new TabManager($this->store);
+        $tm->indexNewTab(self::UUID_A);
+
+        $tabmanager = $this->store->get('tabmanager');
+        $tabmanager['tabs'][self::UUID_A]['is_active']   = false;
+        $tabmanager['tabs'][self::UUID_A]['last_active']  = time() - 7200;
+        $this->store->set('tabmanager', $tabmanager);
+
+        // Negative threshold is a documented no-op (same guard as 0)
+        $removed = $tm->cleanupInactiveTabs(-1);
+
+        $this->assertSame(0, $removed);
+        $this->assertArrayHasKey(self::UUID_A, $this->tabs());
     }
 
     public function testCleanupInactiveTabsReturnsZeroForNonPositiveThreshold(): void

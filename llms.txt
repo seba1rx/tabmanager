@@ -351,7 +351,7 @@ echo json_encode(['ok' => true]);
 composer test
 ```
 
-61 tests, 87 assertions. All public methods of `TabManager` are covered, including `isTabIndexed`, `cleanupInactiveTabs`, and constructor store injection.
+67 tests, 114 assertions. All public methods of `TabManager` are covered, including `isTabIndexed`, `cleanupInactiveTabs`, and constructor store injection.
 
 Tests use `ArraySessionStore` — an in-memory implementation of `SessionStoreInterface` defined in the test file. No PHP session functions, no files written to disk, fully isolated.
 

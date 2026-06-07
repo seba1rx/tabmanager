@@ -1,11 +1,14 @@
 /**
  * TabManagerClient
  *
- * This script ensures that each browser tab has its own unique ID and
- * that this ID is also sent to the backend through a cookie.
+ * Assigns each browser tab a unique UUID and sends it to the PHP backend
+ * via the X-TabManager-TabId request header on every AJAX call, enabling
+ * per-tab session isolation. A shared cookie (TABMANAGER_TABID) is set as
+ * a non-AJAX fallback only — the header is the primary mechanism.
  *
- * Move this file to your assets directory and include it in your main HTML file:
- * <script src="/assets/seba1rx_tabmanagerclient.js"></script>
+ * Composer copies this file to the consumer project root automatically.
+ * Serve it from there or move it to your assets directory:
+ * <script src="/seba1rx_tabmanagerclient.js"></script>
  */
 const TabManagerClient = {
     /**
@@ -243,7 +246,7 @@ const TabManagerClient = {
 
     notifyTabClosed: () => {
         try {
-            const url = '/tabmanager/tab-close';
+            const url = window.TABMANAGER_TAB_CLOSE_URL ?? '/tabmanager/tab-close';
             const data = { tab_id: TabManagerClient.tab.id };
             navigator.sendBeacon(url, JSON.stringify(data));
         } catch (e) {
@@ -253,7 +256,7 @@ const TabManagerClient = {
 
     notifyNewTab: () => {
         try {
-            const url = '/tabmanager/new-tab';
+            const url = window.TABMANAGER_NEW_TAB_URL ?? '/tabmanager/new-tab';
             const data = { tab_id: TabManagerClient.tab.id };
             navigator.sendBeacon(url, JSON.stringify(data));
         } catch (e) {
@@ -298,7 +301,7 @@ const TabManagerClient = {
         }
 
         // Notify backend to index the tab
-        TabManagerClient.notifyNewTab(tabId);
+        TabManagerClient.notifyNewTab();
 
         // Notify backend softly when tab is closing
         window.addEventListener('beforeunload', () => {

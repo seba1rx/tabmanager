@@ -206,6 +206,8 @@ If neither is present, `set()` does nothing. If the tab is not registered, `set(
 | `window.TABMANAGER_DEBUG` | `false` | Enables `console.log` tracing |
 | `window.TABMANAGER_HEARTBEAT_URL` | `'/tabmanager/heartbeat'` | Override heartbeat endpoint |
 | `window.TABMANAGER_HEARTBEAT_INTERVAL` | `30000` | Heartbeat interval in milliseconds |
+| `window.TABMANAGER_NEW_TAB_URL` | `'/tabmanager/new-tab'` | Override new-tab registration endpoint |
+| `window.TABMANAGER_TAB_CLOSE_URL` | `'/tabmanager/tab-close'` | Override tab-close notification endpoint |
 
 ## HTTP endpoints (auto-registered by bootstrap)
 

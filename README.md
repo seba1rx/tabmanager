@@ -168,7 +168,7 @@ Registered automatically on every `require 'vendor/autoload.php'`:
 
 > These endpoints intercept the request before your application router runs and call `exit`. They are invisible to your framework.
 
-Debug endpoints are restricted to `127.0.0.1` / `::1` unless `define('TABMANAGER_DEBUG', true)` is set.
+Debug endpoints are only accessible when `define('TABMANAGER_DEBUG', true)` is set. There is no IP-based fallback — REMOTE_ADDR checks were removed because reverse proxies always report 127.0.0.1 as the client IP.
 
 ---
 
@@ -266,6 +266,8 @@ Set these globals **before** loading the script:
 | `window.TABMANAGER_DEBUG` | `false` | Enables verbose console logging |
 | `window.TABMANAGER_HEARTBEAT_URL` | `/tabmanager/heartbeat` | Heartbeat endpoint URL |
 | `window.TABMANAGER_HEARTBEAT_INTERVAL` | `30000` | Heartbeat interval in milliseconds |
+| `window.TABMANAGER_NEW_TAB_URL` | `/tabmanager/new-tab` | Override new-tab registration endpoint |
+| `window.TABMANAGER_TAB_CLOSE_URL` | `/tabmanager/tab-close` | Override tab-close notification endpoint |
 
 ---
 

@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * TabManager bootstrap
  *
@@ -116,8 +117,7 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'package'             => 'seba1rx/tabmanager',
-            'version'             => '1.0.0',
-            'session_key'         => $tabManager->getSessionKey(),
+            'session_key'         => TabManager::SESSION_KEY,
             'tabs'                => $tabs,
             // SEC-01: only expose the tabmanager slice of $_SESSION, not the
             // full session (which may contain auth tokens, user data, etc.).

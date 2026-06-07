@@ -18,7 +18,7 @@
  */
 
 require __DIR__ . '/bootstrap.php';
-include __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 session_start();
 
 // --- Handle AJAX delete request -------------------------------------------
@@ -27,12 +27,16 @@ session_start();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $input = json_decode(file_get_contents('php://input'), true);
 
-    if (($input['action'] ?? '') === 'delete' && !empty($input['tab_id'])) {
+    $deleteTabId = $input['tab_id'] ?? '';
+    if (($input['action'] ?? '') === 'delete'
+        && !empty($deleteTabId)
+        && Seba1rx\TabManager\TabManager::isValidTabId($deleteTabId)
+    ) {
         $tabManager = new Seba1rx\TabManager\TabManager();
-        $tabManager->destroyTabSession($input['tab_id']);
+        $tabManager->destroyTabSession($deleteTabId);
 
         header('Content-Type: application/json');
-        echo json_encode(['status' => 'deleted', 'tab_id' => $input['tab_id']]);
+        echo json_encode(['status' => 'deleted', 'tab_id' => $deleteTabId]);
         exit;
     }
 

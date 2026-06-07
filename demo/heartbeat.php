@@ -19,13 +19,13 @@
  */
 
 require __DIR__ . '/bootstrap.php';
-include __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 session_start();
 
 // INTEGRATION: read the tab UUID from the header sent by TabManagerClient.getHeaders()
 $tabId = $_SERVER['HTTP_X_TABMANAGER_TABID'] ?? null;
 
-if ($tabId) {
+if ($tabId && Seba1rx\TabManager\TabManager::isValidTabId($tabId)) {
     // INTEGRATION: touchTab() updates last_active + is_active = true.
     // It does NOT modify the tab's data slot.
     $tabManager = new Seba1rx\TabManager\TabManager();

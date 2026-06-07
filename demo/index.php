@@ -5,7 +5,7 @@
  * here and registers all /tabmanager/* endpoints. No extra configuration needed.
  */
 require __DIR__ . '/bootstrap.php';        // demo-only: redirects session storage to demo/sessions/
-include __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 session_start();
 

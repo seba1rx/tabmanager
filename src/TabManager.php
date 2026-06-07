@@ -11,6 +11,8 @@ use Seba1rx\TabManager\Contracts\SessionStoreInterface;
  */
 class TabManager
 {
+    public const SESSION_KEY = 'tabs';
+
     private SessionStoreInterface $store;
 
     /**
@@ -259,22 +261,12 @@ class TabManager
     }
 
     /**
-     * Gets the key used to index the tabs.
-     *
-     * @return string
-     */
-    public function getSessionKey(): string
-    {
-        return 'tabs';
-    }
-
-    /**
      * Generates a UUID v4 (format: 8-4-4-4-12, example: 6ff19a11-97cb-4060-b68f-3b81836ec5f0)
      * (not used by the main flow — JS generates the UUID)
      *
      * @return string UUID v4 lowercase
      */
-    function uuid_v4(): string {
+    public function uuid_v4(): string {
         $data = random_bytes(16);
 
         // Adjust the version to 0100 (v4)
@@ -301,7 +293,7 @@ class TabManager
      * @param bool   $onlyV4
      * @return bool
      */
-    function is_valid_uuid(string $uuid, bool $onlyV4 = true): bool {
+    public function is_valid_uuid(string $uuid, bool $onlyV4 = true): bool {
         $pattern = $onlyV4
             ? '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i'
             : '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';

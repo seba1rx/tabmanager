@@ -11,10 +11,18 @@
  */
 
 require __DIR__ . '/bootstrap.php';
-include __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 include __DIR__ . '/WordStringGenerator.php';
 
 session_start();
+
+$tabId = $_SERVER['HTTP_X_TABMANAGER_TABID'] ?? null;
+if (!$tabId || !Seba1rx\TabManager\TabManager::isValidTabId($tabId)) {
+    http_response_code(400);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => 'Invalid or missing tab ID']);
+    exit;
+}
 
 // INTEGRATION: instantiate TabManager — it reads the session and resolves the
 // tab UUID from the X-TabManager-TabId request header internally.

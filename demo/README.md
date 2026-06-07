@@ -110,5 +110,6 @@ $_SESSION['tabmanager']['tabs']['<uuid>']['data']['your-key'] = 'your-value';
 ## What the demo does NOT show
 
 - Integration with a PHP framework (Laravel, Symfony) — the session driver and bootstrap sequence differ per framework.
-- Server-side garbage collection of stale tabs — `last_active` is tracked but cleanup logic is not yet implemented.
+- **Custom session store** — the demo uses `new TabManager()` with no arguments, which defaults to `PhpSessionStore` (native PHP sessions). In applications where another package already manages the session, you can implement `Seba1rx\TabManager\Contracts\SessionStoreInterface` and pass it to the constructor: `new TabManager($myStore)`. See the main README for details.
+- Server-side garbage collection of stale tabs — `last_active` is tracked; use `$tabManager->cleanupInactiveTabs($seconds)` to remove inactive tabs older than a given threshold.
 - Multi-page navigation — the demo is a single page. In multi-page apps `TabManagerClient.ready` must be awaited on every page that uses the tab ID.

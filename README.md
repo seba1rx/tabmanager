@@ -182,9 +182,65 @@ Debug endpoints are restricted to `127.0.0.1` / `::1` unless `define('TABMANAGER
 | `get(string $key, mixed $default = null)` | Retrieves a value from the current tab's session slot |
 | `destroyTabSession(string $tabId)` | Deletes all session data for a tab |
 | `markInactiveTab(string $tabId)` | Sets `is_active = false` (called on `beforeunload`) |
+| `isTabIndexed(?string $tabId = null): bool` | Returns whether a tab is registered; resolves current tab from header/cookie when no argument given |
+| `cleanupInactiveTabs(int $olderThanSeconds): int` | Removes inactive tabs older than the given threshold; returns count deleted |
+| `getTabIdStrict(): ?string` | Reads `X-TabManager-TabId` header only — no cookie fallback. Use for sensitive endpoints. |
 | `debug(): array` | Returns a summary of all tab sessions |
 | `uuid_v4(): string` | Generates a UUIDv4 (utility for consumers) |
 | `is_valid_uuid(string $uuid, bool $onlyV4)` | Validates UUID format (utility for consumers) |
+
+---
+
+## Custom session store
+
+By default `TabManager` manages the session itself using native PHP functions (`session_start()`, `$_SESSION`). If your application already handles the session — for example, through a session-management package — you can delegate session responsibility to a custom class and pass it to the constructor.
+
+### The contract
+
+`Seba1rx\TabManager\Contracts\SessionStoreInterface` defines six methods:
+
+```php
+interface SessionStoreInterface
+{
+    public function start(): void;           // start if not already active (idempotent)
+    public function isActive(): bool;        // whether the session is currently active
+    public function get(string $key, mixed $default = null): mixed;
+    public function set(string $key, mixed $value): void;
+    public function has(string $key): bool;
+    public function remove(string $key): void;
+}
+```
+
+### Using the default store (standard setup)
+
+When no store is provided, `TabManager` instantiates `PhpSessionStore` internally:
+
+```php
+$tm = new TabManager(); // uses PhpSessionStore → calls session_start() if needed
+```
+
+### Injecting a custom store
+
+Implement the interface and pass your store to the constructor:
+
+```php
+use Seba1rx\TabManager\Contracts\SessionStoreInterface;
+use Seba1rx\TabManager\TabManager;
+
+class MySessionStore implements SessionStoreInterface
+{
+    public function start(): void  { /* session already started by your framework */ }
+    public function isActive(): bool { return /* check your session driver */; }
+    public function get(string $key, mixed $default = null): mixed { /* ... */ }
+    public function set(string $key, mixed $value): void { /* ... */ }
+    public function has(string $key): bool { /* ... */ }
+    public function remove(string $key): void { /* ... */ }
+}
+
+$tm = new TabManager(new MySessionStore());
+```
+
+`TabManager` calls `$store->start()` in the constructor. If the session is already active your `start()` implementation can be a no-op. All `set()`, `get()`, `has()`, and `remove()` calls use the store root — `TabManager` manages its own `'tabmanager'` key internally.
 
 ---
 
@@ -267,17 +323,19 @@ composer test
 | Class / method | Scenarios covered |
 |----------------|-------------------|
 | `isValidTabId()` | Valid UUID v4 (lower/upper/mixed case), wrong version digit, wrong variant nibble, empty string, arbitrary string, too short, too long, invalid hex chars, missing hyphens |
-| `__construct()` | Session structure initialization, existing data not overwritten, other session keys untouched |
+| `__construct()` | Session structure initialization, existing data not overwritten, other session keys untouched, default store (PhpSessionStore), custom store injection |
 | `indexNewTab()` | `data` initialized as empty array, `is_active` defaults to `true`, `last_active` set to current time, idempotency |
 | `touchTab()` | `last_active` updated, inactive tab reactivated, `data` not modified, creates tab if not registered |
 | `set()` | Value stored correctly, `last_active` updated, tab reactivated, no-op when tab not registered (SEC-04), no-op when no tab ID present, key overwrite, cookie fallback, various value types |
 | `get()` | Returns stored value, returns `null` for absent key, returns custom default, returns default when tab not registered, returns default when no tab ID |
 | `markInactiveTab()` | Sets `is_active = false`, `data` and `last_active` preserved, no-op for unregistered tab |
 | `destroyTabSession()` | Removes tab entry, sibling tabs unaffected, no-op for unregistered tab |
+| `isTabIndexed()` | Returns `true` for registered tab, `false` for unregistered, explicit UUID argument, resolves current tab from header, returns `false` when no ID present |
+| `cleanupInactiveTabs()` | Removes stale inactive tab, preserves active tab, preserves recent inactive tab, returns 0 when nothing to clean, no-op for threshold ≤ 0 |
 | `debug()` | Empty array when no tabs, correct structure (`is_active`, `last_active`, `keys`, `size`), `last_active` formatted as `Y-m-d H:i:s`, `keys` contains data key names, `size` matches `json_encode` byte length |
 | `getTabIdStrict()` | Returns header value, returns `null` when only cookie present, returns `null` when nothing present |
 
-Tests use a null session save handler so no files are written to disk and tests are fully isolated.
+Tests use an in-memory `ArraySessionStore` (implements `SessionStoreInterface`) — no PHP session functions, no files written, fully isolated.
 
 ---
 

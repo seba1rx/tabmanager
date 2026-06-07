@@ -10,8 +10,7 @@
     ],
     "autoload": {
         "psr-4": {
-            "Seba1rx\\TabManager\\": "src/",
-            "Seba1rx\\TabManager\\Exceptions\\": "Exceptions/"
+            "Seba1rx\\TabManager\\": "src/"
         },
         "files": [
             "bin/bootstrap.php"

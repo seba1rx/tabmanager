@@ -2,7 +2,6 @@
 namespace Seba1rx\TabManager;
 
 use Seba1rx\TabManager\Contracts\SessionStoreInterface;
-use Seba1rx\TabManager\TabManagerException;
 
 /**
  * TabManager
@@ -274,7 +273,6 @@ class TabManager
      * (not used by the main flow — JS generates the UUID)
      *
      * @return string UUID v4 lowercase
-     * @throws TabManagerException
      */
     function uuid_v4(): string {
         $data = random_bytes(16);

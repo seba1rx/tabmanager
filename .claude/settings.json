@@ -6,7 +6,11 @@
       "Bash(composer install *)",
       "Bash(composer require *)",
       "Bash(git -C /home/legion/dev/proyectos/tabmanager diff HEAD --stat)",
-      "Bash(git -C /home/legion/dev/proyectos/tabmanager status --short)"
+      "Bash(git -C /home/legion/dev/proyectos/tabmanager status --short)",
+      "Bash(mkdir -p /home/legion/dev/proyectos/tabmanager/src/Contracts)"
+    ],
+    "additionalDirectories": [
+      "/home/legion/dev/proyectos/tabmanager/src"
     ]
   }
 }

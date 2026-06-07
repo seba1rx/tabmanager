@@ -1,38 +1,58 @@
 <?php
 namespace Seba1rx\TabManager;
 
+use Seba1rx\TabManager\Contracts\SessionStoreInterface;
 use Seba1rx\TabManager\TabManagerException;
 
 /**
  * TabManager
- * Provides per-tab session isolation using a browser cookie and JS client
+ * Provides per-tab session isolation using a browser cookie and JS client.
+ * Session access is delegated to a SessionStoreInterface implementation,
+ * defaulting to PhpSessionStore (native PHP sessions) when none is provided.
  */
 class TabManager
 {
-    public function __construct()
+    private SessionStoreInterface $store;
+
+    /**
+     * @param SessionStoreInterface|null $store
+     *   Optional session store. Defaults to PhpSessionStore (native PHP sessions).
+     *   Pass a custom implementation to integrate with an existing session layer
+     *   (e.g. a wrapper around another package that has already started the session).
+     */
+    public function __construct(?SessionStoreInterface $store = null)
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            // Session is not started yet
-            session_start();
+        $this->store = $store ?? new PhpSessionStore();
+        $this->store->start();
+
+        if (!$this->store->has('tabmanager')) {
+            $this->store->set('tabmanager', ['tabs' => []]);
+        } else {
+            $tabmanager = $this->store->get('tabmanager');
+            if (!isset($tabmanager['tabs'])) {
+                $tabmanager['tabs'] = [];
+                $this->store->set('tabmanager', $tabmanager);
+            }
         }
-        if (!isset($_SESSION['tabmanager'])) $_SESSION['tabmanager'] = [];
-        if (!isset($_SESSION['tabmanager']['tabs'])) $_SESSION['tabmanager']['tabs'] = [];
     }
 
     /**
-     * Creates the tab id index in the tabs index in the $_SESSION array
+     * Creates the tab id index in the tabs index in the session store.
+     * Idempotent: if the tab is already registered, does nothing.
      *
      * @param string $tabId
      * @return void
      */
     public function indexNewTab(string $tabId): void
     {
-        if (!isset($_SESSION['tabmanager']['tabs'][$tabId])) {
-            $_SESSION['tabmanager']['tabs'][$tabId] = [];
-
-            $_SESSION['tabmanager']['tabs'][$tabId]['data'] = [];
-            $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = true;
-            $_SESSION['tabmanager']['tabs'][$tabId]['last_active'] = time();
+        $tabmanager = $this->store->get('tabmanager', ['tabs' => []]);
+        if (!isset($tabmanager['tabs'][$tabId])) {
+            $tabmanager['tabs'][$tabId] = [
+                'data'        => [],
+                'is_active'   => true,
+                'last_active' => time(),
+            ];
+            $this->store->set('tabmanager', $tabmanager);
         }
     }
 
@@ -80,62 +100,70 @@ class TabManager
     }
 
     /**
-     * Set session data for this tab
+     * Set session data for this tab.
+     * No-op if the tab is not registered (SEC-04: prevents implicit slot creation).
      *
      * @param string $key
-     * @param mixed $value
+     * @param mixed  $value
      * @return void
      */
     public function set(string $key, mixed $value): void
     {
-        $tabId = $this->getTabId();
+        $tabId      = $this->getTabId();
+        $tabmanager = $this->store->get('tabmanager', ['tabs' => []]);
+
         // SEC-04: only write to tabs that were explicitly registered via
         // indexNewTab(). Avoids implicit session slot creation from arbitrary
         // header/cookie values.
-        if (!$tabId || !isset($_SESSION['tabmanager']['tabs'][$tabId])) return;
+        if (!$tabId || !isset($tabmanager['tabs'][$tabId])) return;
 
-        $_SESSION['tabmanager']['tabs'][$tabId]['data'][$key] = $value;
-        $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = true;
-        $_SESSION['tabmanager']['tabs'][$tabId]['last_active'] = time();
+        $tabmanager['tabs'][$tabId]['data'][$key]  = $value;
+        $tabmanager['tabs'][$tabId]['is_active']   = true;
+        $tabmanager['tabs'][$tabId]['last_active']  = time();
+        $this->store->set('tabmanager', $tabmanager);
     }
 
     /**
-     * Get session data for this tab
+     * Get session data for this tab.
      *
      * @param string $key
-     * @param mixed $default
-     *
+     * @param mixed  $default
      * @return mixed
      */
     public function get(string $key, mixed $default = null): mixed
     {
-        $tabId = $this->getTabId();
-        return $_SESSION['tabmanager']['tabs'][$tabId]['data'][$key] ?? $default;
+        $tabId      = $this->getTabId();
+        $tabmanager = $this->store->get('tabmanager', ['tabs' => []]);
+        return $tabmanager['tabs'][$tabId]['data'][$key] ?? $default;
     }
 
     /**
-     * Destroy all session data for a given tab
+     * Destroy all session data for a given tab.
      *
      * @param string $tabId
      * @return void
      */
     public function destroyTabSession(string $tabId): void
     {
-        if (isset($_SESSION['tabmanager']['tabs'][$tabId])) {
-            unset($_SESSION['tabmanager']['tabs'][$tabId]);
+        $tabmanager = $this->store->get('tabmanager', ['tabs' => []]);
+        if (isset($tabmanager['tabs'][$tabId])) {
+            unset($tabmanager['tabs'][$tabId]);
+            $this->store->set('tabmanager', $tabmanager);
         }
     }
 
     /**
-     * Mark a tab as inactive (used on beforeunload)
+     * Mark a tab as inactive (used on beforeunload).
      *
      * @param string $tabId
      * @return void
      */
     public function markInactiveTab(string $tabId): void
     {
-        if (isset($_SESSION['tabmanager']['tabs'][$tabId])) {
-            $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = false;
+        $tabmanager = $this->store->get('tabmanager', ['tabs' => []]);
+        if (isset($tabmanager['tabs'][$tabId])) {
+            $tabmanager['tabs'][$tabId]['is_active'] = false;
+            $this->store->set('tabmanager', $tabmanager);
         }
     }
 
@@ -149,28 +177,82 @@ class TabManager
      */
     public function touchTab(string $tabId): void
     {
-        if (!isset($_SESSION['tabmanager']['tabs'][$tabId])) {
+        $tabmanager = $this->store->get('tabmanager', ['tabs' => []]);
+        if (!isset($tabmanager['tabs'][$tabId])) {
             $this->indexNewTab($tabId);
             return;
         }
-        $_SESSION['tabmanager']['tabs'][$tabId]['is_active'] = true;
-        $_SESSION['tabmanager']['tabs'][$tabId]['last_active'] = time();
+        $tabmanager['tabs'][$tabId]['is_active']  = true;
+        $tabmanager['tabs'][$tabId]['last_active'] = time();
+        $this->store->set('tabmanager', $tabmanager);
     }
 
     /**
-     * Return all tab session data for debugging
+     * Returns whether a tab is currently indexed in the session.
+     * When called without an argument the current tab ID is resolved via
+     * getTabId() (header → cookie). Returns false if no ID can be resolved.
+     *
+     * @param string|null $tabId Specific UUID to check, or null to use current tab.
+     * @return bool
+     */
+    public function isTabIndexed(?string $tabId = null): bool
+    {
+        $id = $tabId ?? $this->getTabId();
+        if (!$id) return false;
+
+        $tabmanager = $this->store->get('tabmanager', ['tabs' => []]);
+        return isset($tabmanager['tabs'][$id]);
+    }
+
+    /**
+     * Removes inactive tabs whose last_active timestamp is older than
+     * $olderThanSeconds seconds. Active tabs are never removed regardless of age.
+     * Returns the number of tabs removed.
+     *
+     * @param int $olderThanSeconds Tabs inactive for longer than this are deleted.
+     *                              Values <= 0 are treated as a no-op and return 0.
+     * @return int Number of tabs removed.
+     */
+    public function cleanupInactiveTabs(int $olderThanSeconds): int
+    {
+        if ($olderThanSeconds <= 0) return 0;
+
+        $tabmanager = $this->store->get('tabmanager', ['tabs' => []]);
+        $cutoff     = time() - $olderThanSeconds;
+        $removed    = 0;
+
+        foreach ($tabmanager['tabs'] as $tabId => $tab) {
+            if (($tab['is_active'] ?? true) === false
+                && ($tab['last_active'] ?? PHP_INT_MAX) < $cutoff
+            ) {
+                unset($tabmanager['tabs'][$tabId]);
+                $removed++;
+            }
+        }
+
+        if ($removed > 0) {
+            $this->store->set('tabmanager', $tabmanager);
+        }
+
+        return $removed;
+    }
+
+    /**
+     * Return all tab session data for debugging.
      *
      * @return array
      */
     public function debug(): array
     {
-        $result = [];
-        foreach ($_SESSION['tabmanager']['tabs'] ?? [] as $tabId => $data) {
+        $tabmanager = $this->store->get('tabmanager', ['tabs' => []]);
+        $result     = [];
+
+        foreach ($tabmanager['tabs'] as $tabId => $data) {
             $result[$tabId] = [
-                'is_active' => $data['is_active'] ?? false,
+                'is_active'   => $data['is_active'] ?? false,
                 'last_active' => date('Y-m-d H:i:s', $data['last_active'] ?? 0),
-                'keys' => isset($data['data']) ? array_keys($data['data']) : [],
-                'size' => isset($data['data']) ? strlen(json_encode($data['data'])) : 0,
+                'keys'        => isset($data['data']) ? array_keys($data['data']) : [],
+                'size'        => isset($data['data']) ? strlen(json_encode($data['data'])) : 0,
             ];
         }
 
@@ -178,7 +260,7 @@ class TabManager
     }
 
     /**
-     * Gets the key used to index the tabs
+     * Gets the key used to index the tabs.
      *
      * @return string
      */
@@ -189,20 +271,20 @@ class TabManager
 
     /**
      * Generates a UUID v4 (format: 8-4-4-4-12, example: 6ff19a11-97cb-4060-b68f-3b81836ec5f0)
-     * * (not being used in current version)
+     * (not used by the main flow — JS generates the UUID)
+     *
      * @return string UUID v4 lowercase
      * @throws TabManagerException
      */
     function uuid_v4(): string {
         $data = random_bytes(16);
 
-        // Adjust the version to  0100 (v4)
+        // Adjust the version to 0100 (v4)
         $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
 
         // Adjust the variation to 10xx (RFC 4122)
         $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
 
-        // Format as hexadecimal string
         return sprintf(
             '%08s-%04s-%04s-%04s-%012s',
             bin2hex(substr($data, 0, 4)),
@@ -214,10 +296,11 @@ class TabManager
     }
 
     /**
-     * Validates if a string is indeed a UUID (v1..v5)
-     * * (not being used in current version)
+     * Validates if a string is indeed a UUID (v1..v5).
+     * (not used by the package itself — superseded by isValidTabId() for internal use)
+     *
      * @param string $uuid
-     * @param bool $onlyV4
+     * @param bool   $onlyV4
      * @return bool
      */
     function is_valid_uuid(string $uuid, bool $onlyV4 = true): bool {

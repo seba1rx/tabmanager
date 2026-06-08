@@ -173,12 +173,17 @@ $now = time();
     const toggle = document.getElementById('auto-refresh');
     const timer  = setInterval(() => {
         if (toggle.checked) location.reload();
-    }, 3000);
+    }, 10000);
 
     // Delete a tab via AJAX (POST to this same file instead of
     // /tabmanager/debug/delete-tab, which is unreachable without a router).
     async function deleteTab(tabId, btn) {
-        if (!confirm('Delete session data for this tab?')) return;
+        clearInterval(timer); // stop auto-refresh so it can't fire during confirm
+
+        if (!confirm('Delete session data for this tab?')) {
+            location.reload(); // restart timer via fresh page load
+            return;
+        }
 
         btn.disabled    = true;
         btn.textContent = 'Deleting…';
@@ -190,13 +195,10 @@ $now = time();
         });
 
         if (response.ok) {
-            const card = btn.closest('.tab-row');
-            card.style.opacity = '0.4';
-            setTimeout(() => card.remove(), 300);
+            location.reload();
         } else {
             alert('Failed to delete tab.');
-            btn.disabled    = false;
-            btn.textContent = 'Delete';
+            location.reload();
         }
     }
 </script>

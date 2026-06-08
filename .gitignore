@@ -1,5 +1,6 @@
 .vscode/
 /vendor/
+/composer.lock
 CLAUDE.md
 /seba1rx_tabmanagerclient.js
 demo/sessions/

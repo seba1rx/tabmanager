@@ -1,11 +1,13 @@
 {
     "name": "seba1rx/tabmanager",
-    "description": "a simple php bootstrapped solution for session indexed browser tabs",
+    "description": "Per-tab PHP session isolation — each browser tab gets its own namespaced $_SESSION slot via a UUIDv4 header",
     "type": "library",
     "license": "MIT",
+    "keywords": ["session", "tab", "isolation", "per-tab", "uuid", "php"],
     "authors": [
         {
-            "name": "Sebastián Basilio"
+            "name": "Sebastián Basilio",
+            "email": "seba.1rx@gmail.com"
         }
     ],
     "autoload": {

@@ -341,6 +341,34 @@ Tests use an in-memory `ArraySessionStore` (implements `SessionStoreInterface`) 
 
 ---
 
+## Integration with seba1rx/sessionadmin
+
+If your application uses [`seba1rx/sessionadmin`](https://github.com/seba1rx/sessionadmin) for session management, use `SessionAdminBridge` instead of `TabManager` directly. The bridge implements `TabHandlerInterface` (defined in sessionadmin) and lets SessionAdmin own the session lifecycle, so both packages share the same PHP session without conflict.
+
+```bash
+composer require seba1rx/sessionadmin
+```
+
+```php
+use Seba1rx\TabManager\Bridge\SessionAdminBridge;
+
+$session = new App\MySession();
+$session->setTabHandler(new SessionAdminBridge());
+$session->autoCleanupTabs = 30; // optional: remove tabs inactive for > 30 s
+$session->activateSession();    // configures session name/lifetime, then starts session
+
+// After the JS client registers the tab:
+$session->tabHandler->set('cart', ['apple' => 3]);
+$cart  = $session->tabHandler->get('cart');
+$ready = $session->tabHandler->isTabIndexed(); // false until JS fires
+```
+
+`SessionAdminBridge` does not call `session_start()` in its constructor — SessionAdmin starts the session with the correct name and cookie parameters. Once the session is active, all tab methods work normally.
+
+**Bootstrap endpoints and custom session names:** When SessionAdmin configures a custom session name (e.g. `$this->sessionName = 'my_app'`), the tabmanager bootstrap endpoints (`/tabmanager/new-tab`, `/tabmanager/heartbeat`, etc.) must use the same session name. Set `session_name()` before `require 'vendor/autoload.php'` in the entry point that handles those requests, or route them through a script that calls `$session->activateSession()` first.
+
+---
+
 ## Requirements
 
 - PHP >= 8.1

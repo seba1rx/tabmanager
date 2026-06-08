@@ -347,6 +347,32 @@ header('Content-Type: application/json');
 echo json_encode(['ok' => true]);
 ```
 
+## Integration with seba1rx/sessionadmin
+
+When both packages are used together, use `SessionAdminBridge` (from `Seba1rx\TabManager\Bridge\SessionAdminBridge`) instead of `TabManager` directly. The bridge extends `TabManager` and implements `TabHandlerInterface` (defined in sessionadmin), allowing SessionAdmin to inject it via `setTabHandler()`.
+
+**Key difference from `TabManager`:** `SessionAdminBridge` does NOT call `session_start()` in its constructor. SessionAdmin owns the session lifecycle and calls `session_start()` in `activateSession()` with the correct name and cookie parameters.
+
+```php
+// Requires: composer require seba1rx/sessionadmin
+use Seba1rx\TabManager\Bridge\SessionAdminBridge;
+
+$session = new App\MySession();
+$session->setTabHandler(new SessionAdminBridge());
+$session->autoCleanupTabs = 30; // optional: run cleanupInactiveTabs(30) on every activateSession()
+$session->activateSession();    // sets session name, starts session, runs cleanup
+
+// Tab data is available immediately after activateSession():
+$session->tabHandler->set('cart', $items);
+$cart = $session->tabHandler->get('cart');
+```
+
+**`autoCleanupTabs` behaviour:** SessionAdmin calls `$tabHandler->cleanupInactiveTabs($n)` at the end of every `activateSession()`. Since the bridge defers start(), the 'tabmanager' session key may not exist yet on the very first request — this is safe because `cleanupInactiveTabs()` handles a missing key gracefully (returns 0).
+
+**Bootstrap endpoints and custom session names:** Tabmanager's auto-registered endpoints (`/tabmanager/new-tab`, `/tabmanager/heartbeat`, etc.) are handled by `bin/bootstrap.php`, which creates `new TabManager()` internally. If SessionAdmin uses a non-default session name (e.g. `$this->sessionName = 'my_app'`), those endpoint requests must call `session_name('my_app')` before the autoload, or be routed through a script that runs `$session->activateSession()` first.
+
+**Session data:** both packages write to distinct `$_SESSION` keys (`sessionadmin` and `tabmanager`) and never collide.
+
 ## Testing
 
 ```bash

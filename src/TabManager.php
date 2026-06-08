@@ -13,7 +13,7 @@ class TabManager
 {
     public const SESSION_KEY = 'tabs';
 
-    private SessionStoreInterface $store;
+    protected SessionStoreInterface $store;
 
     /**
      * @param SessionStoreInterface|null $store

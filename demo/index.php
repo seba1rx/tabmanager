@@ -23,17 +23,18 @@ $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX
     <!--
         INTEGRATION STEP: configure the JS client before loading it.
 
-        window.TABMANAGER_HEARTBEAT_URL overrides the default heartbeat endpoint
-        (/tabmanager/heartbeat). That default works in any setup where all requests
-        are routed through a PHP front controller (frameworks, SPAs with a catch-all).
+        The TABMANAGER_*_URL globals override the default /tabmanager/* endpoints.
+        Those defaults work in any setup where requests are routed through a PHP
+        front controller (frameworks, SPAs with a catch-all router).
 
         This demo runs with `php -S` which serves files directly without a router,
-        so /tabmanager/* paths return 404. heartbeat.php is the workaround.
+        so /tabmanager/* paths return 404. Physical PHP files are used as workarounds.
     -->
     <script>
-        window.TABMANAGER_DEBUG          = true;
-        window.TABMANAGER_HEARTBEAT_URL  = 'heartbeat.php';
-        window.TABMANAGER_TAB_STATUS_URL = 'tab_status.php';
+        window.TABMANAGER_DEBUG           = true;
+        window.TABMANAGER_HEARTBEAT_URL   = 'heartbeat.php';
+        window.TABMANAGER_TAB_STATUS_URL  = 'tab_status.php';
+        window.TABMANAGER_TAB_CLOSE_URL   = 'tab_close.php';
     </script>
 
     <!--

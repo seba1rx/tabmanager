@@ -58,6 +58,39 @@ class TabManager
     }
 
     /**
+     * Reads the X-TabManager-TabId header, validates it, checks whether the tab
+     * is indexed in the currently active session, outputs a JSON response, and exits.
+     *
+     * The caller is responsible for starting (and naming) the session before calling
+     * this method. It reads $_SESSION directly and never calls session_start(), making
+     * it usable with any session setup: custom session name, custom handler, or
+     * third-party session packages.
+     *
+     * Intended for custom tab_status.php workaround files used with `php -S` (where
+     * the default /tabmanager/tab-status endpoint is unreachable). Consumers using a
+     * framework with a catch-all route do not need this — the endpoint is registered
+     * automatically by bootstrap.php.
+     *
+     * Usage:
+     *   session_name('MY_APP');
+     *   session_start();
+     *   TabManager::handleTabStatusRequest(); // outputs JSON and exits
+     *
+     * @return never
+     */
+    public static function handleTabStatusRequest(): never
+    {
+        $tabId   = $_SERVER['HTTP_X_TABMANAGER_TABID'] ?? null;
+        $indexed = $tabId !== null
+            && self::isValidTabId($tabId)
+            && isset($_SESSION['tabmanager'][self::SESSION_KEY][$tabId]);
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['indexed' => $indexed, 'tab_id' => $tabId]);
+        exit;
+    }
+
+    /**
      * Validates that a string is a well-formed UUID v4.
      * Used by bootstrap.php to reject arbitrary strings before they reach
      * the session. Also available to consumers for their own validation.

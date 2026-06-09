@@ -303,7 +303,32 @@ Key behaviors:
 - Fires only on `visibilitychange` to visible — not on initial page load.
 - Fails open (no event) if the endpoint is unreachable, to avoid false positives.
 - The heartbeat does NOT resume if the tab is no longer indexed.
-- For `php -S` setups, point `window.TABMANAGER_TAB_STATUS_URL` at a physical PHP file that calls `isTabIndexed()`.
+- For `php -S` setups, point `window.TABMANAGER_TAB_STATUS_URL` at a physical PHP file (see below).
+
+### Custom tab_status.php (php -S workaround)
+
+`TabManager::handleTabStatusRequest()` is a static helper that reads the `X-TabManager-TabId` header, validates it, checks whether the tab is indexed in `$_SESSION`, outputs `{ "indexed": bool, "tab_id": "..." }` as JSON, and exits. It does **not** call `session_start()` — the caller owns the session setup.
+
+Minimal example (default session name):
+```php
+<?php
+declare(strict_types=1);
+require_once __DIR__ . '/../vendor/autoload.php';
+session_start();
+Seba1rx\TabManager\TabManager::handleTabStatusRequest();
+```
+
+Custom session name (e.g. when using a session management package):
+```php
+<?php
+declare(strict_types=1);
+require_once __DIR__ . '/../vendor/autoload.php';
+session_name('MY_APP');
+session_start();
+Seba1rx\TabManager\TabManager::handleTabStatusRequest();
+```
+
+Then set `window.TABMANAGER_TAB_STATUS_URL = 'tab_status.php'` in your HTML before loading the JS client.
 
 ## Common mistakes
 

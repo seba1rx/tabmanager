@@ -265,6 +265,45 @@ const TabManagerClient = {
     },
 
     /**
+     * Checks whether the current tab is still indexed in the PHP session.
+     *
+     * Called on visibilitychange to visible, before resuming the heartbeat.
+     * If the tab no longer exists (e.g. cleaned up by cleanupInactiveTabs()
+     * while the tab was suspended), dispatches 'tabmanager:session-lost' on
+     * document so the consuming app can warn the user.
+     *
+     * Fails open (returns true) on network error to avoid false positives.
+     *
+     * The backend endpoint is configurable via window.TABMANAGER_TAB_STATUS_URL
+     * (useful for php -S setups without a router).
+     */
+    tabStatus: {
+        get url() {
+            return window.TABMANAGER_TAB_STATUS_URL ?? '/tabmanager/tab-status';
+        },
+
+        /**
+         * @returns {Promise<boolean>} true if indexed, false if not found
+         */
+        check: async () => {
+            try {
+                const response = await fetch(TabManagerClient.tabStatus.url, {
+                    method: 'GET',
+                    headers: TabManagerClient.getHeaders(),
+                });
+                if (!response.ok) return true;
+                const data = await response.json();
+                return data.indexed === true;
+            } catch (e) {
+                if (window.TABMANAGER_DEBUG) {
+                    console.warn('[TabManagerClient] Tab status check failed:', e);
+                }
+                return true;
+            }
+        },
+    },
+
+    /**
      * Initializes the tab manager client:
      * - Assigns tab UUID (resolving duplicates via BroadcastChannel)
      * - Sets the identifying cookie
@@ -316,8 +355,18 @@ const TabManagerClient = {
             TabManagerClient.heartbeat.start();
         }
 
-        document.addEventListener('visibilitychange', () => {
+        // On visibility restore, verify the tab still exists before resuming
+        // the heartbeat. If it was cleaned up server-side while suspended,
+        // dispatch 'tabmanager:session-lost' so the app can warn the user.
+        document.addEventListener('visibilitychange', async () => {
             if (document.visibilityState === 'visible') {
+                const indexed = await TabManagerClient.tabStatus.check();
+                if (!indexed) {
+                    document.dispatchEvent(new CustomEvent('tabmanager:session-lost', {
+                        detail: { tabId: TabManagerClient.tab.id },
+                    }));
+                    return;
+                }
                 TabManagerClient.heartbeat.send();
                 TabManagerClient.heartbeat.start();
             } else {

@@ -208,6 +208,7 @@ If neither is present, `set()` does nothing. If the tab is not registered, `set(
 | `window.TABMANAGER_HEARTBEAT_INTERVAL` | `30000` | Heartbeat interval in milliseconds |
 | `window.TABMANAGER_NEW_TAB_URL` | `'/tabmanager/new-tab'` | Override new-tab registration endpoint |
 | `window.TABMANAGER_TAB_CLOSE_URL` | `'/tabmanager/tab-close'` | Override tab-close notification endpoint |
+| `window.TABMANAGER_TAB_STATUS_URL` | `'/tabmanager/tab-status'` | Override tab-status check endpoint |
 
 ## HTTP endpoints (auto-registered by bootstrap)
 
@@ -216,6 +217,7 @@ If neither is present, `set()` does nothing. If the tab is not registered, `set(
 | `POST` | `/tabmanager/new-tab` | JS `notifyNewTab()` | Registers tab; body: `{ "tab_id": "<uuid>" }` |
 | `POST` | `/tabmanager/heartbeat` | JS `heartbeat.send()` | Touches tab; reads `X-TabManager-TabId` header |
 | `POST` | `/tabmanager/tab-close` | JS `notifyTabClosed()` via `sendBeacon` | Marks tab inactive; body: `{ "tab_id": "<uuid>" }` |
+| `GET` | `/tabmanager/tab-status` | JS `tabStatus.check()` on visibility restore | Returns `{ "indexed": bool, "tab_id": "<uuid>" }` — no session modification |
 | `GET` | `/tabmanager/debug_js` | Dev tools | JSON dump of all tab sessions |
 | `GET` | `/tabmanager/debug_html` | Dev tools | HTML table of all tab sessions |
 | `POST` | `/tabmanager/debug/delete-tab` | Debug UI | Destroys one tab's session entry |
@@ -284,6 +286,24 @@ beforeunload     → heartbeat.stop() + notifyTabClosed() via sendBeacon
 ```
 
 Server side: `touchTab($tabId)` updates `last_active` and sets `is_active = true`. Creates the tab if not yet indexed.
+
+## Session loss detection after tab suspension
+
+When a browser suspends a tab (Chrome Memory Saver, OS memory pressure), the JS heartbeat pauses. If the server calls `cleanupInactiveTabs()` in the interim, the tab's session slot is deleted. When the user returns to the tab, `visibilitychange` fires and the JS client calls `GET /tabmanager/tab-status`. If `indexed` is false, it dispatches `tabmanager:session-lost` on `document` — **no heartbeat is sent**.
+
+```js
+document.addEventListener('tabmanager:session-lost', (e) => {
+    // e.detail.tabId — UUID of the tab that lost its session
+    // show a modal, redirect, or reload — the UI is entirely up to the app
+    alert('Session data removed due to inactivity. Please reload.');
+});
+```
+
+Key behaviors:
+- Fires only on `visibilitychange` to visible — not on initial page load.
+- Fails open (no event) if the endpoint is unreachable, to avoid false positives.
+- The heartbeat does NOT resume if the tab is no longer indexed.
+- For `php -S` setups, point `window.TABMANAGER_TAB_STATUS_URL` at a physical PHP file that calls `isTabIndexed()`.
 
 ## Common mistakes
 

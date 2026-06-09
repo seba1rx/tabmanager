@@ -31,8 +31,9 @@ $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX
         so /tabmanager/* paths return 404. heartbeat.php is the workaround.
     -->
     <script>
-        window.TABMANAGER_DEBUG       = true;
-        window.TABMANAGER_HEARTBEAT_URL = 'heartbeat.php';
+        window.TABMANAGER_DEBUG          = true;
+        window.TABMANAGER_HEARTBEAT_URL  = 'heartbeat.php';
+        window.TABMANAGER_TAB_STATUS_URL = 'tab_status.php';
     </script>
 
     <!--
@@ -72,6 +73,19 @@ $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX
 
 <div class="container py-4" style="max-width: 760px;">
 
+    <!--
+        INTEGRATION: listen for 'tabmanager:session-lost' to warn the user
+        when the tab's session data was removed server-side while it was suspended.
+        The event fires on visibilitychange to visible if the tab is no longer indexed.
+        Replace this with your own UI — modal, toast, redirect, etc.
+    -->
+    <div id="session-lost-alert" class="alert alert-warning alert-dismissible d-none mb-3" role="alert">
+        <strong>Session data lost.</strong>
+        This tab was inactive for too long and its session data was removed by the server.
+        Reload the page or start a new session.
+        <button type="button" class="btn-close" onclick="this.closest('.alert').classList.add('d-none')"></button>
+    </div>
+
     <div class="card shadow-sm mb-3">
         <div class="card-body py-3">
             <div class="d-flex align-items-center gap-3">
@@ -109,6 +123,11 @@ $initialSession = json_encode($_SESSION, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX
 
 <script>window.__INITIAL_SESSION__ = <?= $initialSession ?>;</script>
 <script src="app.js"></script>
+<script>
+    document.addEventListener('tabmanager:session-lost', () => {
+        document.getElementById('session-lost-alert').classList.remove('d-none');
+    });
+</script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

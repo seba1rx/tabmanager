@@ -162,6 +162,7 @@ Registered automatically on every `require 'vendor/autoload.php'`:
 | `POST` | `/tabmanager/new-tab` | Register a new tab in session |
 | `POST` | `/tabmanager/heartbeat` | Update `last_active` for a tab |
 | `POST` | `/tabmanager/tab-close` | Mark a tab as inactive |
+| `GET`  | `/tabmanager/tab-status` | Returns `{ "indexed": bool }` — whether the tab still exists in session |
 | `GET`  | `/tabmanager/debug_js` | Session dump as JSON (debug only) |
 | `GET`  | `/tabmanager/debug_html` | Session dump as HTML table (debug only) |
 | `POST` | `/tabmanager/debug/delete-tab` | Delete a tab session (debug only) |
@@ -268,6 +269,41 @@ Set these globals **before** loading the script:
 | `window.TABMANAGER_HEARTBEAT_INTERVAL` | `30000` | Heartbeat interval in milliseconds |
 | `window.TABMANAGER_NEW_TAB_URL` | `/tabmanager/new-tab` | Override new-tab registration endpoint |
 | `window.TABMANAGER_TAB_CLOSE_URL` | `/tabmanager/tab-close` | Override tab-close notification endpoint |
+| `window.TABMANAGER_TAB_STATUS_URL` | `/tabmanager/tab-status` | Override tab-status check endpoint |
+
+---
+
+## Detecting session loss after tab suspension
+
+When a browser suspends a tab (e.g. Chrome Memory Saver) the JS heartbeat stops. If your app calls `cleanupInactiveTabs()` in the meantime, the tab's session slot may be deleted. When the user returns to the tab, TabManager detects this automatically and dispatches a `tabmanager:session-lost` event on `document`.
+
+Listen for it to show a warning — the UI is entirely up to your app:
+
+```js
+document.addEventListener('tabmanager:session-lost', (e) => {
+    // e.detail.tabId — the UUID of the lost tab
+    alert('Your session data was removed due to inactivity. Please reload.');
+});
+```
+
+The check runs silently on every `visibilitychange` to visible. If the endpoint is unreachable (network error, 404) the event is **not** fired — the client fails open to avoid false positives.
+
+For `php -S` setups without a router, point the client at a physical file:
+
+```html
+<script>window.TABMANAGER_TAB_STATUS_URL = '/tab-status.php';</script>
+```
+
+```php
+<?php // tab-status.php
+require_once __DIR__ . '/vendor/autoload.php';
+$tabId   = $_SERVER['HTTP_X_TABMANAGER_TABID'] ?? null;
+$indexed = $tabId && Seba1rx\TabManager\TabManager::isValidTabId($tabId)
+    ? (new Seba1rx\TabManager\TabManager())->isTabIndexed($tabId)
+    : false;
+header('Content-Type: application/json');
+echo json_encode(['indexed' => $indexed, 'tab_id' => $tabId]);
+```
 
 ---
 

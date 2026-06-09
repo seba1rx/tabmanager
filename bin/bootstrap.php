@@ -7,6 +7,7 @@ declare(strict_types=1);
  *  - POST /tabmanager/new-tab
  *  - POST /tabmanager/heartbeat
  *  - POST /tabmanager/tab-close
+ *  - GET  /tabmanager/tab-status
  *  - GET  /tabmanager/debug_js    (requires TABMANAGER_DEBUG=true)
  *  - GET  /tabmanager/debug_html  (requires TABMANAGER_DEBUG=true)
  *  - POST /tabmanager/debug/delete-tab (requires TABMANAGER_DEBUG=true)
@@ -69,6 +70,21 @@ if (!defined('__SEBA1RX_TABMANAGER_BOOTSTRAPPED__')) {
         http_response_code(200);
         header('Content-Type: application/json');
         echo json_encode(['status' => 'ok']);
+        exit;
+    }
+
+    // --- TAB STATUS ENDPOINT ------------------------------------------------
+    if ($method === 'GET' && preg_match('~^/tabmanager/tab-status/?$~', $uri)) {
+        $tabId   = $_SERVER['HTTP_X_TABMANAGER_TABID'] ?? null;
+        $indexed = false;
+
+        if ($tabId && TabManager::isValidTabId($tabId)) {
+            $admin   = new TabManager();
+            $indexed = $admin->isTabIndexed($tabId);
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode(['indexed' => $indexed, 'tab_id' => $tabId]);
         exit;
     }
 
